@@ -4,7 +4,7 @@ Hostinger's Docker Manager consumes a public Compose URL. Publish this
 repository, then use:
 
 ```text
-https://raw.githubusercontent.com/netbirdio/one-clicks/<release>/marketplaces/hostinger/docker-compose.yml
+https://raw.githubusercontent.com/PizzaLovingNerd/netbird-one-clicks/<release>/marketplaces/hostinger/docker-compose.yml
 ```
 
 as the `compose_url` in Hostinger's official Deploy button:

@@ -40,6 +40,12 @@ variable "snapshot_name" {
   default = "netbird-one-click-0.76.0-ubuntu-26-04-{{timestamp}}"
 }
 
+variable "manifest_output" {
+  type        = string
+  default     = "build/manifest.json"
+  description = "Path for Packer's machine-readable build manifest."
+}
+
 source "digitalocean" "netbird" {
   api_token          = var.do_api_token
   droplet_agent      = false
@@ -93,7 +99,7 @@ build {
   }
 
   post-processor "manifest" {
-    output     = "build/manifest.json"
+    output     = var.manifest_output
     strip_path = true
   }
 }

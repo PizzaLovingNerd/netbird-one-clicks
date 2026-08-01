@@ -1,0 +1,195 @@
+---
+name: Provider live tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider to test
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - linode
+          - digitalocean
+          - vultr
+          - hostinger
+          - hetzner
+      confirm_live_costs:
+        description: Create billable resources and run destructive cleanup
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netbird-provider-live-tests
+  cancel-in-progress: false
+
+jobs:
+  disabled:
+    if: >-
+      ${{ github.ref != 'refs/heads/main' ||
+          vars.LIVE_PROVIDER_TESTS_ENABLED != 'true' ||
+          inputs.confirm_live_costs != true }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain the safety gate
+        run: |
+          echo "Live provider tests remain disabled."
+          echo "Follow TESTS.md, set LIVE_PROVIDER_TESTS_ENABLED=true,"
+          echo "then dispatch again with the cost confirmation selected."
+
+  linode:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.LIVE_PROVIDER_TESTS_ENABLED == 'true' &&
+          inputs.confirm_live_costs == true &&
+          (inputs.provider == 'all' || inputs.provider == 'linode') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+      LINODE_REGION: ${{ vars.LINODE_REGION }}
+      LINODE_TYPE: ${{ vars.LINODE_TYPE }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y dnsutils jq
+      - name: Run Linode live test
+        run: ./scripts/live-provider-test.sh linode
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linode-live-test-${{ github.run_id }}
+          path: build/live-tests/linode/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  digitalocean:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.LIVE_PROVIDER_TESTS_ENABLED == 'true' &&
+          inputs.confirm_live_costs == true &&
+          (inputs.provider == 'all' || inputs.provider == 'digitalocean') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+      DIGITALOCEAN_REGION: ${{ vars.DIGITALOCEAN_REGION }}
+      DIGITALOCEAN_SIZE: ${{ vars.DIGITALOCEAN_SIZE }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y dnsutils jq
+      - name: Run DigitalOcean live test
+        run: ./scripts/live-provider-test.sh digitalocean
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digitalocean-live-test-${{ github.run_id }}
+          path: build/live-tests/digitalocean/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  vultr:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.LIVE_PROVIDER_TESTS_ENABLED == 'true' &&
+          inputs.confirm_live_costs == true &&
+          (inputs.provider == 'all' || inputs.provider == 'vultr') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
+      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+      VULTR_MARKETPLACE_IMAGE_ID: ${{ vars.VULTR_MARKETPLACE_IMAGE_ID }}
+      VULTR_REGION: ${{ vars.VULTR_REGION }}
+      VULTR_PLAN: ${{ vars.VULTR_PLAN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y dnsutils jq
+      - name: Run Vultr live test
+        run: ./scripts/live-provider-test.sh vultr
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vultr-live-test-${{ github.run_id }}
+          path: build/live-tests/vultr/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  hostinger:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.LIVE_PROVIDER_TESTS_ENABLED == 'true' &&
+          inputs.confirm_live_costs == true &&
+          (inputs.provider == 'all' || inputs.provider == 'hostinger') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+      HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y dnsutils jq
+      - name: Run Hostinger live test
+        run: ./scripts/live-provider-test.sh hostinger
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hostinger-live-test-${{ github.run_id }}
+          path: build/live-tests/hostinger/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  hetzner:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.LIVE_PROVIDER_TESTS_ENABLED == 'true' &&
+          inputs.confirm_live_costs == true &&
+          (inputs.provider == 'all' || inputs.provider == 'hetzner') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      HETZNER_TOKEN: ${{ secrets.HETZNER_TOKEN }}
+      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+      HETZNER_LOCATION: ${{ vars.HETZNER_LOCATION }}
+      HETZNER_SERVER_TYPE: ${{ vars.HETZNER_SERVER_TYPE }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y dnsutils jq
+      - name: Run Hetzner live test
+        run: ./scripts/live-provider-test.sh hetzner
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hetzner-live-test-${{ github.run_id }}
+          path: build/live-tests/hetzner/
+          if-no-files-found: ignore
+          retention-days: 14

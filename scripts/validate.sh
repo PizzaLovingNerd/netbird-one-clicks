@@ -92,7 +92,9 @@ run_release() {
 
   test -s "${ROOT_DIR}/LICENSE"
   test -s "${ROOT_DIR}/PUBLISHING.md"
+  test -s "${ROOT_DIR}/TESTS.md"
   test -s "${ROOT_DIR}/docs/COMPONENTS.md"
+  test -s "${ROOT_DIR}/.github/workflows/provider-live-tests.yml"
   test -s "${ROOT_DIR}/marketplaces/linode/submission/README.md"
   test -s "${ROOT_DIR}/marketplaces/linode/submission/DOCUMENTATION.md"
   test -s "${ROOT_DIR}/marketplaces/digitalocean/SUBMISSION.md"

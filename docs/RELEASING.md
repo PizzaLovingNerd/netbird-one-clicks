@@ -18,7 +18,8 @@ Before starting a marketplace review:
    `ONECLICKS_REF=main`; do not publish an adapter that installs from a moving
    branch.
 
-The default repository URL is `https://github.com/netbirdio/one-clicks.git`.
+The default repository URL is
+`https://github.com/PizzaLovingNerd/netbird-one-clicks.git`.
 Change `ONECLICKS_REPOSITORY` in the marketplace artifacts if the final
 repository is published elsewhere.
 

@@ -63,7 +63,7 @@ Before any marketplace submission, we need to:
 
 1. Publish this code in a public repository.
 2. Create a real, immutable release tag. The adapters currently expect
-   `https://github.com/netbirdio/one-clicks.git` at tag `v0.1.0`, but that
+   `https://github.com/PizzaLovingNerd/netbird-one-clicks.git` at tag `v0.1.0`, but that
    release is not currently available.
 3. Add a repository license.
 4. Add a list of every included component, version, and license.
@@ -402,7 +402,7 @@ The credentials should be revoked immediately after testing.
 ## Decisions needed from management
 
 1. Approve one public repository, preferably
-   `github.com/netbirdio/one-clicks`.
+   `github.com/PizzaLovingNerd/netbird-one-clicks`.
 2. Approve the repository license.
 3. Assign an owner for Marketplace support requests.
 4. Approve official NetBird branding, screenshots, and listing text.

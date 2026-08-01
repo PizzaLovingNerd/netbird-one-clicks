@@ -4,6 +4,9 @@ This is the release and submission runbook for Akamai Cloud (Linode),
 DigitalOcean, Vultr, Hostinger, and Hetzner Cloud. Provider guidance was
 rechecked against official sources on 2026-07-31.
 
+Run release candidates through the disabled-by-default live workflow in
+`TESTS.md` before completing the provider steps below.
+
 Marketplace approval cannot be guaranteed by repository checks. Vendor
 enrollment, agreements, brand approval, portal access, screenshots, and human
 review remain external provider actions.
@@ -32,7 +35,8 @@ Do not submit any provider until every applicable item is complete.
   `https://docs.netbird.io/help/netbird-support` are approved as Marketplace
   contacts.
 - [ ] Current, redacted 800×500 login and dashboard screenshots are approved.
-- [ ] The repository is public at `https://github.com/netbirdio/one-clicks`.
+- [x] The repository is public at
+  `https://github.com/PizzaLovingNerd/netbird-one-clicks`.
 - [ ] Release tag `v0.1.0` exists and is protected against mutation.
 - [ ] `make sync && make validate && make release` passes from a clean clone.
 - [ ] Container and installer versions match `docs/COMPONENTS.md`.
@@ -45,8 +49,7 @@ Do not submit any provider until every applicable item is complete.
 
 ### Publish the immutable source release
 
-Run these steps in the real Git checkout; this workspace copy does not contain
-`.git` metadata.
+Run these steps from a clean `main` checkout:
 
 ```bash
 make sync
@@ -65,10 +68,10 @@ Verify both release consumers before building or submitting:
 
 ```bash
 git ls-remote --exit-code --tags \
-  https://github.com/netbirdio/one-clicks.git refs/tags/v0.1.0
+  https://github.com/PizzaLovingNerd/netbird-one-clicks.git refs/tags/v0.1.0
 
 curl --fail --location \
-  https://raw.githubusercontent.com/netbirdio/one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml \
+  https://raw.githubusercontent.com/PizzaLovingNerd/netbird-one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml \
   >/dev/null
 ```
 
@@ -249,7 +252,7 @@ no documented third-party Docker Catalog submission form.
 ### Publish the button
 
 ```bash
-compose_url='https://raw.githubusercontent.com/netbirdio/one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml'
+compose_url='https://raw.githubusercontent.com/PizzaLovingNerd/netbird-one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml'
 encoded_url=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$compose_url")
 printf 'https://www.hostinger.com/docker-hosting?compose_url=%s\n' "$encoded_url"
 ```

@@ -40,6 +40,12 @@ variable "snapshot_name" {
   default = "netbird-one-click-0.76.0-ubuntu-24.04-{{timestamp}}"
 }
 
+variable "manifest_output" {
+  type        = string
+  default     = "build/hetzner-manifest.json"
+  description = "Path for Packer's machine-readable build manifest."
+}
+
 source "hcloud" "netbird" {
   token                = var.hcloud_token
   image                = var.base_image
@@ -97,7 +103,7 @@ build {
   }
 
   post-processor "manifest" {
-    output     = "build/hetzner-manifest.json"
+    output     = var.manifest_output
     strip_path = true
   }
 }

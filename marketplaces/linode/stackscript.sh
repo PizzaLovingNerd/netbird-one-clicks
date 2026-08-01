@@ -16,7 +16,7 @@ exec > >(tee /dev/ttyS0 /var/log/stackscript.log) 2>&1
 #<UDF name="user_name" label="Limited sudo username" default="netbirdadmin">
 #<UDF name="disable_root" label="Disable root access over SSH?" oneOf="Yes,No" default="Yes">
 
-readonly ONECLICKS_REPOSITORY="${ONECLICKS_REPOSITORY:-https://github.com/netbirdio/one-clicks.git}"
+readonly ONECLICKS_REPOSITORY="${ONECLICKS_REPOSITORY:-https://github.com/PizzaLovingNerd/netbird-one-clicks.git}"
 readonly ONECLICKS_REF="${ONECLICKS_REF:-v0.1.0}"
 readonly INSTALL_DIR="/opt/netbird-one-clicks"
 readonly CLONE_DIR="/tmp/netbird-one-clicks.clone"
@@ -53,10 +53,10 @@ if [[ -e ${INSTALL_DIR} || -e ${CLONE_DIR} ]]; then
   exit 1
 fi
 
-git clone \
-  --depth 1 \
-  --branch "${ONECLICKS_REF}" \
-  -- "${ONECLICKS_REPOSITORY}" "${CLONE_DIR}"
+git init "${CLONE_DIR}"
+git -C "${CLONE_DIR}" remote add origin "${ONECLICKS_REPOSITORY}"
+git -C "${CLONE_DIR}" fetch --depth 1 origin "${ONECLICKS_REF}"
+git -C "${CLONE_DIR}" checkout --detach FETCH_HEAD
 mv -- "${CLONE_DIR}" "${INSTALL_DIR}"
 
 if [[ ${SUBDOMAIN} == "@" ]]; then

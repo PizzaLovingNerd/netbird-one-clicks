@@ -37,7 +37,8 @@ See [Architecture and marketplace fit](docs/ARCHITECTURE.md) for the shared
 source model, extension contract, and provider-guideline analysis. See the
 [Marketplace release guide](docs/RELEASING.md) for provider-specific
 release mechanics. Use [PUBLISHING.md](PUBLISHING.md) as the authoritative
-submission checklist and provider-portal runbook.
+submission checklist and provider-portal runbook. See [TESTS.md](TESTS.md) for
+the disabled-by-default GitHub Actions live tests.
 
 The adapter code is BSD-3-Clause licensed. Runtime components and their
 separate licenses are listed in [docs/COMPONENTS.md](docs/COMPONENTS.md).

@@ -10,7 +10,7 @@ write_files:
       umask 077
 
       readonly metadata_base="http://169.254.169.254/v1/internal"
-      readonly repository="${ONECLICKS_REPOSITORY:-https://github.com/netbirdio/one-clicks.git}"
+      readonly repository="${ONECLICKS_REPOSITORY:-https://github.com/PizzaLovingNerd/netbird-one-clicks.git}"
       readonly release_ref="${ONECLICKS_REF:-v0.1.0}"
       readonly install_dir="/opt/netbird-one-clicks"
 
@@ -56,10 +56,10 @@ write_files:
       ssh_gate_added=true
 
       if [[ ! -d ${install_dir}/.git ]]; then
-        git clone \
-          --depth 1 \
-          --branch "${release_ref}" \
-          -- "${repository}" "${install_dir}"
+        git init "${install_dir}"
+        git -C "${install_dir}" remote add origin "${repository}"
+        git -C "${install_dir}" fetch --depth 1 origin "${release_ref}"
+        git -C "${install_dir}" checkout --detach FETCH_HEAD
       fi
 
       "${install_dir}/getting-started.sh" --provider vultr --non-interactive

@@ -9,7 +9,7 @@ Docker Catalog submission form.
 After publishing release `v0.1.0`, URL-encode this immutable Compose URL:
 
 ```text
-https://raw.githubusercontent.com/netbirdio/one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml
+https://raw.githubusercontent.com/PizzaLovingNerd/netbird-one-clicks/v0.1.0/marketplaces/hostinger/docker-compose.yml
 ```
 
 Use it in the official button:
