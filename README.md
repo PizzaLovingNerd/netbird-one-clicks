@@ -38,7 +38,8 @@ source model, extension contract, and provider-guideline analysis. See the
 [Marketplace release guide](docs/RELEASING.md) for provider-specific
 release mechanics. Use [PUBLISHING.md](PUBLISHING.md) as the authoritative
 submission checklist and provider-portal runbook. See [TESTS.md](TESTS.md) for
-the disabled-by-default GitHub Actions live tests.
+the disabled-by-default GitHub Actions live tests. Use
+[UPDATING.md](UPDATING.md) whenever NetBird's upstream quick-start changes.
 
 The adapter code is BSD-3-Clause licensed. Runtime components and their
 separate licenses are listed in [docs/COMPONENTS.md](docs/COMPONENTS.md).
