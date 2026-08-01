@@ -1,0 +1,43 @@
+---
+- name: Configure DNS through the provider adapter
+  ansible.builtin.include_tasks: "providers/{{ marketplace_provider }}.yml"
+  when:
+    - netbird_dns_token | length > 0
+    - marketplace_provider in ['linode', 'digitalocean']
+
+- name: Wait for exact public DNS propagation
+  ansible.builtin.command:
+    argv:
+      - dig
+      - +time=3
+      - +tries=1
+      - +short
+      - A
+      - "{{ netbird_fqdn }}"
+      - "@{{ item }}"
+  loop:
+    - 1.1.1.1
+    - 8.8.8.8
+  register: dns_public_results
+  changed_when: false
+  failed_when: false
+  retries: 90
+  delay: 10
+  until:
+    - dns_public_results.rc == 0
+    - dns_public_results.stdout_lines | length == 1
+    - dns_public_results.stdout_lines[0] == preflight_public_ipv4
+
+- name: Require exact public DNS
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - item.stdout_lines | length == 1
+      - item.stdout_lines[0] == preflight_public_ipv4
+    fail_msg: >-
+      {{ netbird_fqdn }} must resolve only to {{ preflight_public_ipv4 }}.
+      Resolver {{ item.item }} returned
+      {{ item.stdout_lines | default([]) | join(', ') | default('no A record', true) }}.
+  loop: "{{ dns_public_results.results }}"
+  loop_control:
+    label: "{{ item.item }}"

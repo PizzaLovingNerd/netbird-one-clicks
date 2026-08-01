@@ -1,0 +1,15 @@
+---
+- name: Install a NetBird one-click deployment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  vars_files:
+    - ansible/group_vars/all.yml
+  roles:
+    - role: preflight
+    - role: dns
+    - role: host
+    - role: netbird
+    - role: post

@@ -1,0 +1,92 @@
+---
+- name: Find the Linode DNS zone
+  ansible.builtin.uri:
+    url: https://api.linode.com/v4/domains?page_size=500
+    method: GET
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+      X-Filter: "{{ {'domain': netbird_dns_zone} | to_json }}"
+    return_content: true
+    status_code: 200
+  register: dns_linode_zones
+  no_log: true
+
+- name: Require exactly one Linode DNS zone
+  ansible.builtin.assert:
+    that:
+      - dns_linode_zones.json.data | length == 1
+    fail_msg: >-
+      The Linode token needs Domains read/write access to the existing
+      {{ netbird_dns_zone }} zone.
+
+- name: Select the Linode DNS record name
+  ansible.builtin.set_fact:
+    dns_zone_id: "{{ dns_linode_zones.json.data[0].id }}"
+    dns_record_name: >-
+      {{ '' if netbird_fqdn == netbird_dns_zone
+         else netbird_fqdn
+              | regex_replace('\.' ~ netbird_dns_zone ~ '$', '') }}
+  no_log: true
+
+- name: List Linode DNS records
+  ansible.builtin.uri:
+    url: >-
+      https://api.linode.com/v4/domains/{{ dns_zone_id }}/records?page_size=500
+    method: GET
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    return_content: true
+    status_code: 200
+  register: dns_linode_records
+  no_log: true
+
+- name: Select matching Linode A records
+  ansible.builtin.set_fact:
+    dns_matching_records: >-
+      {{ dns_linode_records.json.data
+         | selectattr('type', 'equalto', 'A')
+         | selectattr('name', 'equalto', dns_record_name)
+         | list }}
+  no_log: true
+
+- name: Refuse ambiguous Linode DNS
+  ansible.builtin.assert:
+    that:
+      - dns_matching_records | length <= 1
+    fail_msg: >-
+      {{ netbird_fqdn }} has multiple Linode A records. Reconcile them before
+      deploying.
+
+- name: Create the Linode A record
+  ansible.builtin.uri:
+    url: "https://api.linode.com/v4/domains/{{ dns_zone_id }}/records"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    body_format: json
+    body:
+      type: A
+      name: "{{ dns_record_name }}"
+      target: "{{ preflight_public_ipv4 }}"
+      ttl_sec: 300
+    status_code: [200, 201]
+  no_log: true
+  when: dns_matching_records | length == 0
+
+- name: Update the Linode A record
+  ansible.builtin.uri:
+    url: >-
+      https://api.linode.com/v4/domains/{{ dns_zone_id
+      }}/records/{{ dns_matching_records[0].id }}
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    body_format: json
+    body:
+      target: "{{ preflight_public_ipv4 }}"
+      ttl_sec: 300
+    status_code: 200
+  no_log: true
+  when:
+    - dns_matching_records | length == 1
+    - dns_matching_records[0].target != preflight_public_ipv4

@@ -1,0 +1,3 @@
+---
+- name: Prepare NetBird image dependencies
+  ansible.builtin.import_playbook: ansible/prepare-image.yml

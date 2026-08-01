@@ -1,0 +1,12 @@
+************************************************************
+NetBird {{ marketplace_provider | capitalize }} One-Click
+
+Dashboard: https://{{ netbird_fqdn }}
+Deployment: {{ netbird_project_dir }}
+Access notes: /home/{{ netbird_admin_user }}/{{ '.credentials' if marketplace_provider == 'linode' else '.netbird-access.txt' }}
+
+Create the first NetBird administrator in the browser wizard.
+{% if post_reboot_required.stat.exists %}
+Reboot required: confirm limited-user SSH access, then run sudo reboot.
+{% endif %}
+************************************************************

@@ -1,0 +1,71 @@
+#cloud-config
+
+write_files:
+  - path: /usr/local/sbin/netbird-vultr-provision
+    owner: root:root
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+      umask 077
+
+      readonly metadata_base="http://169.254.169.254/v1/internal"
+      readonly repository="${ONECLICKS_REPOSITORY:-https://github.com/netbirdio/one-clicks.git}"
+      readonly release_ref="${ONECLICKS_REF:-v0.1.0}"
+      readonly install_dir="/opt/netbird-one-clicks"
+
+      ssh_gate_added=false
+
+      restore_ssh_access() {
+        if [[ ${ssh_gate_added} == true ]]; then
+          ufw --force delete deny 22/tcp >/dev/null 2>&1 || true
+        fi
+      }
+
+      trap restore_ssh_access EXIT
+
+      metadata_value() {
+        curl \
+          --fail \
+          --silent \
+          --show-error \
+          --connect-timeout 3 \
+          --max-time 10 \
+          --retry 30 \
+          --retry-all-errors \
+          --retry-delay 2 \
+          --header "METADATA-TOKEN: vultr" \
+          "${metadata_base}/app-$1"
+      }
+
+      export MARKETPLACE_PROVIDER=vultr
+      export NETBIRD_FQDN="$(metadata_value nb_domain)"
+      export NETBIRD_ACME_EMAIL="$(metadata_value acme_email)"
+      export NETBIRD_ADMIN_USER="$(
+        metadata_value admin_user 2>/dev/null || printf netbirdadmin
+      )"
+      export NETBIRD_DISABLE_ROOT_SSH=true
+
+      apt-get -o Acquire::Retries=5 update
+      apt-get -o Acquire::Retries=5 install -y ca-certificates git ufw
+
+      # Vultr recommends preventing SSH logins during longer provisioning.
+      # The EXIT trap restores access on both success and ordinary failure.
+      ufw insert 1 deny 22/tcp
+      ufw --force enable
+      ssh_gate_added=true
+
+      if [[ ! -d ${install_dir}/.git ]]; then
+        git clone \
+          --depth 1 \
+          --branch "${release_ref}" \
+          -- "${repository}" "${install_dir}"
+      fi
+
+      "${install_dir}/getting-started.sh" --provider vultr --non-interactive
+      rm -rf -- "${install_dir}/.git"
+
+runcmd:
+  - [/usr/local/sbin/netbird-vultr-provision]
+
+final_message: "NetBird provisioning finished with status $UPTIME seconds after boot."

@@ -1,0 +1,14 @@
+NetBird URL: https://{{ netbird_fqdn }}
+NetBird Web Administrator: Create the first administrator in the browser setup wizard.
+
+Sudo Username: {{ netbird_admin_user }}
+Sudo Password: {{ post_access_sudo_password }}
+
+Deployment Directory: {{ netbird_project_dir }}
+Compose Health: cd {{ netbird_project_dir }} && sudo docker compose ps
+Compose Logs: cd {{ netbird_project_dir }} && sudo docker compose logs
+Persistent Data: Docker volumes netbird_data, netbird_config, and netbird_traefik_letsencrypt
+{% if post_reboot_required.stat.exists %}
+
+REBOOT REQUIRED: Confirm administrator SSH access, then run sudo reboot.
+{% endif %}

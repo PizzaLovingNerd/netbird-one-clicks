@@ -1,0 +1,29 @@
+---
+schema_version: 1
+application: netbird
+minimum_memory_mb: 2048
+minimum_disk_mb: 8192
+supported_ubuntu:
+  - "24.04"
+  - "26.04"
+ports:
+  - {port: 22, protocol: tcp, purpose: ssh}
+  - {port: 80, protocol: tcp, purpose: http-and-acme}
+  - {port: 443, protocol: tcp, purpose: https-grpc-relay}
+  - {port: 3478, protocol: udp, purpose: stun}
+providers:
+  linode:
+    artifact: marketplaces/linode/stackscript.sh
+    packaging: stackscript-ansible
+  digitalocean:
+    artifact: marketplaces/digitalocean/packer.pkr.hcl
+    packaging: packer-snapshot
+  vultr:
+    artifact: marketplaces/vultr/vendor-data.yml
+    packaging: cloud-init-vendor-data
+  hostinger:
+    artifact: marketplaces/hostinger/docker-compose.yml
+    packaging: compose-url
+  hetzner:
+    artifact: marketplaces/hetzner/packer.pkr.hcl
+    packaging: packer-snapshot

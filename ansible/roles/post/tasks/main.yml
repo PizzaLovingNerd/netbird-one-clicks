@@ -1,0 +1,97 @@
+---
+- name: Wait for the embedded identity provider
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/oauth2/.well-known/openid-configuration"
+    method: GET
+    status_code: 200
+    validate_certs: true
+    timeout: 10
+  register: post_oidc_health
+  retries: 60
+  delay: 5
+  until: post_oidc_health.status | default(0) == 200
+
+- name: Verify the public API requires authentication
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/api/users"
+    method: GET
+    status_code: [401, 403]
+    validate_certs: true
+    timeout: 10
+  register: post_api_health
+  retries: 30
+  delay: 5
+  until: post_api_health.status | default(0) in [401, 403]
+
+- name: Verify the public dashboard
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/"
+    method: GET
+    status_code: 200
+    validate_certs: true
+    timeout: 10
+  register: post_dashboard_health
+  retries: 30
+  delay: 5
+  until: post_dashboard_health.status | default(0) == 200
+
+- name: Check whether a reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: post_reboot_required
+
+- name: Read the limited administrator password
+  ansible.builtin.set_fact:
+    post_access_sudo_password: >-
+      {{ lookup('ansible.builtin.file', netbird_state_dir ~ '/sudo-password') }}
+  no_log: true
+
+- name: Write access notes
+  ansible.builtin.template:
+    src: access.txt.j2
+    dest: "/home/{{ netbird_admin_user }}/.netbird-access.txt"
+    owner: "{{ netbird_admin_user }}"
+    group: "{{ netbird_admin_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Write Akamai Marketplace credentials file
+  ansible.builtin.template:
+    src: access.txt.j2
+    dest: "/home/{{ netbird_admin_user }}/.credentials"
+    owner: "{{ netbird_admin_user }}"
+    group: "{{ netbird_admin_user }}"
+    mode: "0600"
+  no_log: true
+  when: marketplace_provider == 'linode'
+
+- name: Install Marketplace MOTD
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Mark deployment complete
+  ansible.builtin.copy:
+    dest: "{{ netbird_state_dir }}/complete"
+    content: |
+      provider={{ marketplace_provider }}
+      fqdn={{ netbird_fqdn }}
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Show deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "NetBird is ready at https://{{ netbird_fqdn }}"
+      - "Create the first administrator in the browser setup wizard."
+      - >-
+        Access notes: /home/{{ netbird_admin_user }}/{{
+          '.credentials'
+          if marketplace_provider == 'linode'
+          else '.netbird-access.txt'
+        }}
+      - "Deployment: {{ netbird_project_dir }}"

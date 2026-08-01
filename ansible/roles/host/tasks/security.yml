@@ -1,0 +1,88 @@
+---
+- name: Set the system hostname
+  ansible.builtin.hostname:
+    name: "{{ netbird_fqdn }}"
+
+- name: Set default inbound firewall policy
+  ansible.builtin.command: ufw default deny incoming
+  register: host_ufw_default_in
+  changed_when: "'updated' in host_ufw_default_in.stdout | lower"
+
+- name: Set default outbound firewall policy
+  ansible.builtin.command: ufw default allow outgoing
+  register: host_ufw_default_out
+  changed_when: "'updated' in host_ufw_default_out.stdout | lower"
+
+- name: Allow required inbound ports
+  ansible.builtin.command: "ufw allow {{ item }}"
+  loop:
+    - 22/tcp
+    - 80/tcp
+    - 443/tcp
+    - "{{ netbird_stun_port }}/udp"
+  register: host_ufw_allow
+  changed_when: "'added' in host_ufw_allow.stdout | lower"
+
+- name: Enable UFW
+  ansible.builtin.command: ufw --force enable
+  register: host_ufw_enable
+  changed_when: "'active' not in host_ufw_enable.stdout | lower"
+
+- name: Configure Fail2ban SSH jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/netbird-sshd.local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      port = ssh
+      maxretry = 5
+      findtime = 10m
+      bantime = 10m
+  notify: Restart Fail2ban
+
+- name: Enable Fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Install Docker-aware firewall script
+  ansible.builtin.template:
+    src: netbird-docker-firewall.sh.j2
+    dest: /usr/local/sbin/netbird-docker-firewall
+    owner: root
+    group: root
+    mode: "0750"
+  notify: Restart NetBird Docker firewall
+
+- name: Install Docker-aware firewall service
+  ansible.builtin.copy:
+    src: netbird-docker-firewall.service
+    dest: /etc/systemd/system/netbird-docker-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart NetBird Docker firewall
+
+- name: Enable Docker-aware firewall
+  ansible.builtin.systemd_service:
+    name: netbird-docker-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Configure SSH policy
+  ansible.builtin.template:
+    src: ssh-policy.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-netbird-marketplace.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload SSH
+
+- name: Apply security handlers
+  ansible.builtin.meta: flush_handlers

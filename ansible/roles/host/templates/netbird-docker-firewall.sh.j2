@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+readonly filter_chain="NETBIRD-FILTER"
+readonly public_interface="{{ netbird_public_interface }}"
+readonly bridge_interface="netbird0"
+
+iptables --wait -N "${filter_chain}" 2>/dev/null || true
+iptables --wait -F "${filter_chain}"
+iptables --wait -A "${filter_chain}" \
+  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables --wait -A "${filter_chain}" \
+  -i "${public_interface}" -o "${bridge_interface}" \
+  -p tcp -m multiport --dports 80,443 -j ACCEPT
+iptables --wait -A "${filter_chain}" \
+  -i "${public_interface}" -o "${bridge_interface}" \
+  -p udp --dport {{ netbird_stun_port }} -j ACCEPT
+iptables --wait -A "${filter_chain}" \
+  -i "${public_interface}" -o "${bridge_interface}" -j DROP
+iptables --wait -A "${filter_chain}" -j RETURN
+
+iptables --wait -C DOCKER-USER -j "${filter_chain}" 2>/dev/null \
+  || iptables --wait -I DOCKER-USER 1 -j "${filter_chain}"

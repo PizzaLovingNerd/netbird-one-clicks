@@ -1,0 +1,27 @@
+{
+  "description_de": "Eine selbst gehostete Plattform für sichere, WireGuard-basierte private Netzwerke.",
+  "description_en": "A self-hosted platform for secure WireGuard-based private networks.",
+  "documentation_url": "https://docs.netbird.io/",
+  "name": "NetBird",
+  "os_id": 0,
+  "packages": [
+    {
+      "license": "AGPL-3.0",
+      "name": "NetBird Server"
+    },
+    {
+      "license": "AGPL-3.0",
+      "name": "NetBird Dashboard"
+    },
+    {
+      "license": "MIT",
+      "name": "Traefik"
+    },
+    {
+      "license": "Apache-2.0",
+      "name": "Docker"
+    }
+  ],
+  "recommended_server_type": 22,
+  "version": "0.1.0"
+}

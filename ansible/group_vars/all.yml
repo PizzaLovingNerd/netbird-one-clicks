@@ -1,0 +1,35 @@
+---
+marketplace_provider: >-
+  {{ lookup('ansible.builtin.env', 'MARKETPLACE_PROVIDER')
+     | default('generic', true) | lower }}
+
+netbird_fqdn: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_FQDN') | lower }}
+netbird_acme_email: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_ACME_EMAIL') }}
+netbird_admin_user: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_ADMIN_USER')
+     | default('netbirdadmin', true) | lower }}
+netbird_disable_root_ssh: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_DISABLE_ROOT_SSH')
+     | default('true', true) | lower in ['1', 'true', 'yes'] }}
+
+netbird_dns_token: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_DNS_TOKEN')
+     | default('', true) }}
+netbird_dns_zone: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_DNS_ZONE')
+     | default('', true) | lower }}
+netbird_public_ipv4: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_PUBLIC_IPV4')
+     | default('', true) | trim }}
+
+netbird_project_dir: /opt/netbird
+netbird_installer_dir: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_INSTALLER_DIR')
+     | default(playbook_dir, true) }}
+netbird_state_dir: /var/lib/netbird-one-click
+netbird_compose_source: "{{ netbird_installer_dir }}/shared/docker-compose.yml"
+preflight_public_ipv4: ""
+netbird_public_interface: "{{ ansible_facts.default_ipv4.interface }}"
+netbird_stun_port: 3478

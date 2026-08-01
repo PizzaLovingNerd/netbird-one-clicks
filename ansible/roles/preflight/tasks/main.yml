@@ -1,0 +1,207 @@
+---
+- name: Require root privileges
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.user_id == 'root'
+    fail_msg: The NetBird one-click installer must run as root.
+
+- name: Require a supported provider adapter
+  ansible.builtin.assert:
+    that:
+      - marketplace_provider in
+        ['generic', 'linode', 'digitalocean', 'vultr', 'hetzner']
+    fail_msg: >-
+      MARKETPLACE_PROVIDER must be generic, linode, digitalocean, vultr, or
+      hetzner.
+
+- name: Require a supported Ubuntu LTS release
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version in ['24.04', '26.04']
+    fail_msg: This installer supports Ubuntu 24.04 and 26.04 LTS.
+
+- name: Require a supported architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture in ['x86_64', 'aarch64']
+    fail_msg: This installer supports x86_64 and ARM64.
+
+- name: Require at least 2 GB of memory
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.memtotal_mb | int >= 1800
+    fail_msg: NetBird requires a server with at least 2 GB RAM.
+
+- name: Read available root filesystem space
+  ansible.builtin.command:
+    argv: [df, --output=avail, -k, /]
+  register: preflight_root_disk
+  changed_when: false
+
+- name: Require at least 8 GB of free disk
+  ansible.builtin.assert:
+    that:
+      - preflight_root_disk.stdout_lines[-1] | trim | int >= 8388608
+    fail_msg: NetBird requires at least 8 GB of free disk space.
+
+- name: Validate the public hostname
+  ansible.builtin.assert:
+    that:
+      - netbird_fqdn is match(
+          '^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}'
+          ~ '[a-z0-9])?\.)+[a-z]{2,63}$'
+        )
+    fail_msg: NETBIRD_FQDN must be a DNS hostname such as netbird.example.com.
+
+- name: Validate the Let's Encrypt email
+  ansible.builtin.assert:
+    that:
+      - netbird_acme_email is match(
+          '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$'
+        )
+    fail_msg: NETBIRD_ACME_EMAIL must be a valid email address.
+
+- name: Validate the limited administrator username
+  ansible.builtin.assert:
+    that:
+      - netbird_admin_user is match('^[a-z_][a-z0-9_-]{0,31}$')
+      - netbird_admin_user not in
+        ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man',
+         'lp', 'mail', 'news', 'nobody']
+    fail_msg: NETBIRD_ADMIN_USER is invalid or reserved.
+
+- name: Read existing local accounts
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Inspect the managed administrator marker
+  ansible.builtin.stat:
+    path: "{{ netbird_state_dir }}/admin-user"
+  register: preflight_admin_marker
+
+- name: Read the managed administrator marker
+  ansible.builtin.slurp:
+    path: "{{ netbird_state_dir }}/admin-user"
+  register: preflight_admin_marker_content
+  when: preflight_admin_marker.stat.exists
+
+- name: Refuse to take over an unmanaged account
+  ansible.builtin.assert:
+    that:
+      - netbird_admin_user not in ansible_facts.getent_passwd
+        or (
+          preflight_admin_marker.stat.exists
+          and (
+            preflight_admin_marker_content.content | b64decode | trim
+          ) == netbird_admin_user
+        )
+    fail_msg: >-
+      {{ netbird_admin_user }} already exists and was not created by this
+      installer. Choose another NETBIRD_ADMIN_USER.
+
+- name: Validate provider DNS inputs
+  ansible.builtin.assert:
+    that:
+      - netbird_dns_token | length == 0
+        or marketplace_provider in ['linode', 'digitalocean']
+      - netbird_dns_token | length == 0 or netbird_dns_zone | length > 0
+      - netbird_dns_token | length == 0
+        or netbird_fqdn == netbird_dns_zone
+        or netbird_fqdn.endswith('.' ~ netbird_dns_zone)
+    fail_msg: >-
+      DNS automation requires a Linode or DigitalOcean adapter, an existing
+      NETBIRD_DNS_ZONE, and a hostname inside that zone.
+
+- name: Require the canonical Compose source
+  ansible.builtin.stat:
+    path: "{{ netbird_compose_source }}"
+  register: preflight_compose_source_stat
+
+- name: Validate the canonical Compose source
+  ansible.builtin.assert:
+    that:
+      - preflight_compose_source_stat.stat.isreg | default(false)
+    fail_msg: "Canonical Compose file not found at {{ netbird_compose_source }}."
+
+- name: Select an explicitly supplied public IPv4 address
+  ansible.builtin.set_fact:
+    preflight_public_ipv4: "{{ netbird_public_ipv4 }}"
+  when: netbird_public_ipv4 | length > 0
+
+- name: Read the Hetzner public IPv4 address from instance metadata
+  ansible.builtin.uri:
+    url: http://169.254.169.254/hetzner/v1/metadata/public-ipv4
+    method: GET
+    return_content: true
+    status_code: 200
+    timeout: 5
+  register: preflight_hetzner_metadata
+  when:
+    - preflight_public_ipv4 | length == 0
+    - marketplace_provider == 'hetzner'
+
+- name: Select the Hetzner metadata public IPv4 address
+  ansible.builtin.set_fact:
+    preflight_public_ipv4: "{{ preflight_hetzner_metadata.content | trim }}"
+  when:
+    - preflight_public_ipv4 | length == 0
+    - marketplace_provider == 'hetzner'
+
+- name: Select the default-interface public IPv4 address
+  ansible.builtin.set_fact:
+    preflight_public_ipv4: "{{ ansible_facts.default_ipv4.address }}"
+  when: preflight_public_ipv4 | length == 0
+
+- name: Validate the selected public IPv4 address
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import ipaddress, sys;
+        value = ipaddress.ip_address(sys.argv[1]);
+        raise SystemExit(0 if value.version == 4 and value.is_global else 1)
+      - "{{ preflight_public_ipv4 }}"
+  changed_when: false
+
+- name: Inspect provider-injected root SSH keys
+  ansible.builtin.stat:
+    path: /root/.ssh/authorized_keys
+  register: preflight_root_authorized_keys
+
+- name: Prevent an SSH lockout
+  ansible.builtin.assert:
+    that:
+      - preflight_root_authorized_keys.stat.exists
+      - preflight_root_authorized_keys.stat.size | int > 0
+    fail_msg: >-
+      Root SSH cannot be disabled because no provider-injected SSH key was
+      found. Select an account SSH key or set NETBIRD_DISABLE_ROOT_SSH=false.
+  when: netbird_disable_root_ssh
+
+- name: Validate provider-injected root SSH keys
+  ansible.builtin.command:
+    argv: [ssh-keygen, -l, -f, /root/.ssh/authorized_keys]
+  register: preflight_root_key_validation
+  changed_when: false
+  failed_when: false
+  when:
+    - preflight_root_authorized_keys.stat.exists
+    - preflight_root_authorized_keys.stat.size | int > 0
+
+- name: Require a valid provider-injected SSH key before disabling root
+  ansible.builtin.assert:
+    that:
+      - preflight_root_key_validation.rc | default(1) == 0
+    fail_msg: >-
+      The provider-injected authorized_keys file does not contain a valid SSH
+      key. Select an account SSH key or keep root SSH enabled.
+  when: netbird_disable_root_ssh
+
+- name: Show validated deployment target
+  ansible.builtin.debug:
+    msg:
+      - "Provider: {{ marketplace_provider }}"
+      - "Hostname: {{ netbird_fqdn }}"
+      - "Public IPv4: {{ preflight_public_ipv4 }}"

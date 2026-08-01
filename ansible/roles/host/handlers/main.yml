@@ -1,0 +1,23 @@
+---
+- name: Restart Fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    state: restarted
+
+- name: Restart NetBird Docker firewall
+  ansible.builtin.systemd_service:
+    name: netbird-docker-firewall
+    enabled: true
+    state: restarted
+    daemon_reload: true
+
+- name: Validate SSH
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  listen: Reload SSH
+
+- name: Reload SSH
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded
+  listen: Reload SSH

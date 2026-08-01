@@ -1,0 +1,8 @@
+# Managed by the NetBird one-click installer.
+{% if netbird_disable_root_ssh %}
+PermitRootLogin no
+{% endif %}
+PubkeyAuthentication yes
+PasswordAuthentication {{ 'no'
+  if preflight_root_key_validation.rc | default(1) == 0
+  else 'yes' }}

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [ -e /var/lib/netbird-one-click/complete ]; then
+  exit 0
+fi
+
+printf '%s\n' \
+  '************************************************************' \
+  'NetBird DigitalOcean 1-Click' \
+  '' \
+  'Sign in as root with an account SSH key to complete setup.' \
+  '************************************************************'

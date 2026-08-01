@@ -1,0 +1,79 @@
+---
+- name: Create or read the sudo password
+  ansible.builtin.set_fact:
+    host_sudo_password: >-
+      {{ lookup(
+        'ansible.builtin.password',
+        netbird_state_dir ~ '/sudo-password length=32 chars=ascii_letters,digits'
+      ) }}
+  no_log: true
+
+- name: Protect the persisted sudo password
+  ansible.builtin.file:
+    path: "{{ netbird_state_dir }}/sudo-password"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Hash the limited administrator password
+  ansible.builtin.command:
+    argv: [openssl, passwd, -6, -stdin]
+    stdin: "{{ host_sudo_password }}"
+    stdin_add_newline: true
+  register: host_sudo_password_hash
+  changed_when: false
+  no_log: true
+
+- name: Create the limited administrator
+  ansible.builtin.user:
+    name: "{{ netbird_admin_user }}"
+    comment: NetBird administrator
+    shell: /bin/bash
+    home: "/home/{{ netbird_admin_user }}"
+    create_home: true
+    groups: [sudo]
+    append: false
+    password: "{{ host_sudo_password_hash.stdout }}"
+    update_password: on_create
+    state: present
+  no_log: true
+
+- name: Record the managed administrator
+  ansible.builtin.copy:
+    dest: "{{ netbird_state_dir }}/admin-user"
+    content: "{{ netbird_admin_user }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Create limited administrator SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ netbird_admin_user }}/.ssh"
+    state: directory
+    owner: "{{ netbird_admin_user }}"
+    group: "{{ netbird_admin_user }}"
+    mode: "0700"
+
+- name: Copy provider-injected SSH keys
+  ansible.builtin.copy:
+    src: /root/.ssh/authorized_keys
+    remote_src: true
+    dest: "/home/{{ netbird_admin_user }}/.ssh/authorized_keys"
+    owner: "{{ netbird_admin_user }}"
+    group: "{{ netbird_admin_user }}"
+    mode: "0600"
+  when:
+    - preflight_root_authorized_keys.stat.exists
+    - preflight_root_authorized_keys.stat.size | int > 0
+
+- name: Validate copied administrator SSH keys
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -l
+      - -f
+      - "/home/{{ netbird_admin_user }}/.ssh/authorized_keys"
+  changed_when: false
+  when: netbird_disable_root_ssh

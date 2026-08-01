@@ -1,0 +1,8 @@
+---
+profile: production
+exclude_paths:
+  - .tools/
+  - .venv/
+  - build/
+warn_list:
+  - args[module]

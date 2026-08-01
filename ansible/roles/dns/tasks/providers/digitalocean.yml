@@ -1,0 +1,83 @@
+---
+- name: Verify the DigitalOcean DNS zone
+  ansible.builtin.uri:
+    url: "https://api.digitalocean.com/v2/domains/{{ netbird_dns_zone }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    return_content: true
+    status_code: 200
+  no_log: true
+
+- name: Select the DigitalOcean DNS record name
+  ansible.builtin.set_fact:
+    dns_record_name: >-
+      {{ '@' if netbird_fqdn == netbird_dns_zone
+         else netbird_fqdn
+              | regex_replace('\.' ~ netbird_dns_zone ~ '$', '') }}
+
+- name: List DigitalOcean DNS records
+  ansible.builtin.uri:
+    url: >-
+      https://api.digitalocean.com/v2/domains/{{ netbird_dns_zone
+      }}/records?per_page=200
+    method: GET
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    return_content: true
+    status_code: 200
+  register: dns_digitalocean_records
+  no_log: true
+
+- name: Select matching DigitalOcean A records
+  ansible.builtin.set_fact:
+    dns_matching_records: >-
+      {{ dns_digitalocean_records.json.domain_records
+         | selectattr('type', 'equalto', 'A')
+         | selectattr('name', 'equalto', dns_record_name)
+         | list }}
+  no_log: true
+
+- name: Refuse ambiguous DigitalOcean DNS
+  ansible.builtin.assert:
+    that:
+      - dns_matching_records | length <= 1
+    fail_msg: >-
+      {{ netbird_fqdn }} has multiple DigitalOcean A records. Reconcile them
+      before deploying.
+
+- name: Create the DigitalOcean A record
+  ansible.builtin.uri:
+    url: "https://api.digitalocean.com/v2/domains/{{ netbird_dns_zone }}/records"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    body_format: json
+    body:
+      type: A
+      name: "{{ dns_record_name }}"
+      data: "{{ preflight_public_ipv4 }}"
+      ttl: 300
+    status_code: 201
+  no_log: true
+  when: dns_matching_records | length == 0
+
+- name: Update the DigitalOcean A record
+  ansible.builtin.uri:
+    url: >-
+      https://api.digitalocean.com/v2/domains/{{ netbird_dns_zone
+      }}/records/{{ dns_matching_records[0].id }}
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ netbird_dns_token }}"
+    body_format: json
+    body:
+      type: A
+      name: "{{ dns_record_name }}"
+      data: "{{ preflight_public_ipv4 }}"
+      ttl: 300
+    status_code: 200
+  no_log: true
+  when:
+    - dns_matching_records | length == 1
+    - dns_matching_records[0].data != preflight_public_ipv4

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+if [[ -e /var/lib/netbird-one-click/complete ]]; then
+  printf 'NetBird one-click is installed. See /etc/motd after login.\n'
+else
+  printf 'NetBird setup starts at the first interactive root login.\n'
+fi

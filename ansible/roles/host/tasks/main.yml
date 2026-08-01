@@ -1,0 +1,17 @@
+---
+- name: Create installer state directory
+  ansible.builtin.file:
+    path: "{{ netbird_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install Docker and host packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Provision the limited administrator
+  ansible.builtin.import_tasks: account.yml
+
+- name: Configure host security
+  ansible.builtin.import_tasks: security.yml

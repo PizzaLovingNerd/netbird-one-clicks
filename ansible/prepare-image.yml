@@ -1,0 +1,30 @@
+---
+- name: Prepare a reusable NetBird Marketplace image
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  tasks:
+    - name: Install shared host and Docker dependencies
+      ansible.builtin.import_role:
+        name: host
+        tasks_from: packages
+
+    - name: Set default image firewall policies
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - {direction: incoming, policy: deny}
+        - {direction: outgoing, policy: allow}
+
+    - name: Allow SSH in the reusable image
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Enable the reusable image firewall
+      community.general.ufw:
+        state: enabled
