@@ -225,20 +225,23 @@ Review the final diff for:
 ## 7. Run provider live tests
 
 Follow `TESTS.md`. Keep live tests disabled while adding secrets and variables,
-then run providers individually before selecting `all`.
+then run providers individually before selecting `all`. Use Let's Encrypt
+staging during iteration and production only for the final release candidate.
 
 At minimum, confirm:
 
 - Exact DNS answers through two public resolvers
-- Trusted TLS and HTTP-to-HTTPS behavior
+- Staging ACME/HTTPS during iteration; trusted production TLS for the release
+  candidate; HTTP-to-HTTPS behavior in both modes
 - Dashboard and OIDC discovery return HTTP 200
 - An unauthenticated API request returns HTTP 401 or 403
+- Management gRPC uses HTTP/2 and the relay accepts a WebSocket upgrade
 - Long-running containers are healthy
-- UDP 3478 is listening and reachable as required
+- An external RFC 5389 binding succeeds over UDP 3478
 - Limited-user SSH and root SSH policy are correct where applicable
 - Installation is idempotent
 - Services recover after a provider reboot
-- Temporary servers, SSH keys, DNS records, and snapshots are removed
+- Temporary servers, SSH keys, DNS records, and snapshots are verified absent
 
 Do not advance the baseline in this file when a provider test is skipped. Note
 any provider outage separately and complete the missing test before publishing.

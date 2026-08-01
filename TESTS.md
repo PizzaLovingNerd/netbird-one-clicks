@@ -8,20 +8,24 @@ The repository has two intentionally separate GitHub Actions workflows:
   create billable resources and must be enabled explicitly for each run.
 
 The live workflow uses a unique `nb-<provider>-<run>-<attempt>` A record in a
-DigitalOcean-managed DNS zone. It verifies public DNS, trusted HTTPS, the
-dashboard, OIDC discovery, the unauthenticated API boundary, container health,
-and restart or reboot persistence. Image-based providers also build their
-Packer snapshot from the checked-out commit. Disposable resources and DNS
-records are removed by an `EXIT` trap.
+DigitalOcean-managed DNS zone. It verifies public DNS, HTTP-to-HTTPS redirect,
+HTTPS, the dashboard, OIDC discovery, the unauthenticated API boundary, an
+external RFC 5389 UDP STUN binding, repeat deployment without secret rotation,
+management gRPC over HTTP/2, relay WebSocket upgrade, container health, and
+restart or reboot persistence. Image-based providers
+also build their Packer snapshot from the checked-out commit. Disposable
+resources and DNS records are deleted and polled until absent by an `EXIT`
+trap; a cleanup failure fails the job.
 
 ## Safety model
 
-Live jobs run only when all four conditions are true:
+Live jobs run only when all five conditions are true:
 
 1. The workflow is started manually with **Run workflow**.
 2. The selected Git ref is the `main` branch.
 3. Repository variable `LIVE_PROVIDER_TESTS_ENABLED` is exactly `true`.
 4. The `confirm_live_costs` checkbox is selected for that dispatch.
+5. The `marketplace-live-tests` GitHub Environment grants approval.
 
 An absent or false repository variable leaves every provider job skipped. The
 workflow has no `push`, `pull_request`, or `schedule` trigger. One live workflow
@@ -32,6 +36,12 @@ addresses change; provider API allowlists must permit the runner, or the
 workflow should be changed to a controlled self-hosted runner with a static
 egress address.
 
+Create the **marketplace-live-tests** Environment under **Settings →
+Environments**. Add a required reviewer and limit deployment branches to
+`main`. Store provider secrets in this Environment when possible. The workflow
+exposes them only to the provider test step; checkout, dependency installation,
+and artifact upload do not inherit provider credentials.
+
 ## Required GitHub Secrets
 
 Add secrets under **Settings → Secrets and variables → Actions → Secrets**.
@@ -39,7 +49,8 @@ Never add the contents of a local `.env` file to the repository.
 
 | Secret | Used by | Required access |
 | --- | --- | --- |
-| `DIGITALOCEAN_TOKEN` | Every job | Read/create/delete A records in `TEST_DNS_ZONE`. The DigitalOcean job additionally creates/deletes build Droplets, test Droplets, snapshots, actions, and temporary SSH keys. |
+| `DIGITALOCEAN_DNS_TOKEN` | Every job | Read/create/delete A records only in `TEST_DNS_ZONE`. |
+| `DIGITALOCEAN_TOKEN` | DigitalOcean | Create/delete build Droplets, test Droplets, snapshots, actions, and temporary SSH keys. |
 | `LINODE_TOKEN` | Linode | Create/read/delete Linodes and private StackScripts; boot and reboot the test Linode. |
 | `VULTR_API_KEY` | Vultr | Create/read/reboot/delete instances and create/delete temporary SSH keys. The API allowlist must admit the runner. |
 | `HOSTINGER_API_TOKEN` | Hostinger | Read the selected VPS, create/read/delete Docker Manager projects, read containers/actions, and restart the VPS. |
@@ -96,7 +107,9 @@ GitHub commit, deploys Ubuntu 24.04, and removes both the Linode and StackScript
 
 ### DigitalOcean
 
-The token must cover both DNS and image testing. The job runs the Packer build,
+Use the separate DNS and compute secrets above. They may initially contain the
+same token if the account cannot scope them separately, but separate narrowly
+scoped tokens are preferred. The job runs the Packer build,
 including DigitalOcean's official cleanup and image checker, creates a Droplet
 from the resulting snapshot, completes first-login provisioning
 noninteractively, reboots it, then deletes the Droplet, snapshot, SSH key, and
@@ -105,11 +118,16 @@ DNS record.
 ### Vultr
 
 Create a private Marketplace application in the Vendor Portal, configure the
-three variables `nb_domain`, `acme_email`, and `admin_user`, and build a current
-**Not Live** image from `marketplaces/vultr/vendor-data.yml`. Put its image ID
+four variables `nb_domain`, `acme_email`, `admin_user`, and `acme_ca`, and
+build a current **Not Live** image from `marketplaces/vultr/vendor-data.yml`.
+Put its image ID
 in `VULTR_MARKETPLACE_IMAGE_ID`. Rebuild this private image after changing the
 vendor data or release tag; the API test deploys that image and supplies real
 Marketplace `app_variables`, so a stale image tests stale code.
+
+`acme_ca` is test-only and lets the private image use Let's Encrypt staging.
+Do not add it to the public submission: public deployments omit it and safely
+default to the production directory.
 
 ### Hostinger
 
@@ -145,21 +163,32 @@ suggestions.
 9. Set `LIVE_PROVIDER_TESTS_ENABLED` back to `false` when live testing is not
    actively needed.
 
-The CLI equivalent for the final dispatch is:
+The dispatch defaults to `acme_environment=staging`. Staging certificates are
+intentionally untrusted, so the test relaxes certificate trust only in that
+mode while still exercising ACME issuance and HTTPS. Use `production` only for
+the final release-candidate run; it performs normal trust verification and
+consumes Let's Encrypt production issuance capacity. Avoid repeated production
+`all` runs because five fresh hostnames are issued per run.
+
+The CLI equivalent for a staging dispatch is:
 
 ```bash
 gh workflow run provider-live-tests.yml \
   --ref main \
   -f provider=all \
+  -f acme_environment=staging \
   -f confirm_live_costs=true
 ```
 
 The repository variable still has to be `true`; the dispatch input cannot
-bypass it.
+bypass it. For the final release-candidate dispatch, change only
+`acme_environment` to `production`.
 
 ## Cleanup and cost audit
 
-Normal success and ordinary failures invoke automatic cleanup. GitHub's hard
+Normal success and ordinary failures invoke automatic cleanup. Each known
+resource deletion is polled until the provider reports it absent, and an API
+or timeout failure makes the workflow fail. GitHub's hard
 job cancellation, runner loss, provider outages, or an API permission error
 can prevent an `EXIT` trap from completing. After every live run, search each
 provider for names beginning with `netbird-ci-` or `nb-ci-`, and inspect the

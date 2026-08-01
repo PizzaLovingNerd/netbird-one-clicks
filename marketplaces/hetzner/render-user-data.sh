@@ -6,6 +6,7 @@ domain=""
 email=""
 admin_user="netbirdadmin"
 disable_root_ssh="true"
+acme_ca_server="https://acme-v02.api.letsencrypt.org/directory"
 
 fail() {
   printf '[error] %s\n' "$*" >&2
@@ -17,9 +18,10 @@ usage() {
     'Usage: render-user-data.sh --domain FQDN --email ADDRESS [options]' \
     '' \
     'Options:' \
-    '  --admin-user NAME   limited sudo username (default: netbirdadmin)' \
-    '  --keep-root-ssh     retain direct root SSH access' \
-    '  --help              show this help'
+    '  --admin-user NAME    limited sudo username (default: netbirdadmin)' \
+    '  --acme-ca-server URL official Let'\''s Encrypt directory URL' \
+    '  --keep-root-ssh      retain direct root SSH access' \
+    '  --help               show this help'
 }
 
 while (($# > 0)); do
@@ -37,6 +39,11 @@ while (($# > 0)); do
     --admin-user)
       [[ $# -ge 2 ]] || fail '--admin-user requires a value.'
       admin_user=$2
+      shift 2
+      ;;
+    --acme-ca-server)
+      [[ $# -ge 2 ]] || fail '--acme-ca-server requires a value.'
+      acme_ca_server=$2
       shift 2
       ;;
     --keep-root-ssh)
@@ -59,6 +66,11 @@ done
   || fail 'The email address is invalid.'
 [[ ${admin_user} =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
   || fail 'The administrator username is invalid.'
+case "${acme_ca_server}" in
+  https://acme-v02.api.letsencrypt.org/directory|\
+  https://acme-staging-v02.api.letsencrypt.org/directory) ;;
+  *) fail 'The ACME CA server must be an official Let'\''s Encrypt directory.' ;;
+esac
 
 printf '%s\n' \
   '#cloud-config' \
@@ -78,6 +90,7 @@ printf '%s\n' \
   "      export MARKETPLACE_PROVIDER=hetzner" \
   "      export NETBIRD_FQDN=${domain}" \
   "      export NETBIRD_ACME_EMAIL=${email}" \
+  "      export NETBIRD_ACME_CA_SERVER=${acme_ca_server}" \
   "      export NETBIRD_ADMIN_USER=${admin_user}" \
   "      export NETBIRD_DISABLE_ROOT_SSH=${disable_root_ssh}" \
   '      /opt/netbird-one-clicks/getting-started.sh --provider hetzner --non-interactive' \

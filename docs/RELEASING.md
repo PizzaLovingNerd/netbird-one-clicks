@@ -11,8 +11,9 @@ Before starting a marketplace review:
    canonical Compose file.
 2. Run `make sync && make validate`.
 3. Test each artifact on a clean supported instance with at least 2 GB RAM.
-4. Confirm DNS, trusted TLS, dashboard, OIDC discovery, API authentication,
-   STUN port exposure, reboot persistence, and SSH access.
+4. Confirm DNS, HTTP redirect, trusted production TLS, dashboard, OIDC
+   discovery, API authentication, management gRPC, relay WebSocket, external
+   STUN binding, repeat installation, reboot persistence, and SSH access.
 5. Tag the repository and update the default `ONECLICKS_REF` in marketplace
    artifacts to that immutable tag. During development, override it with
    `ONECLICKS_REF=main`; do not publish an adapter that installs from a moving

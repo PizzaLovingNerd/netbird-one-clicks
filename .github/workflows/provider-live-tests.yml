@@ -21,6 +21,14 @@ on:
         required: true
         type: boolean
         default: false
+      acme_environment:
+        description: Let's Encrypt environment (use production only for release tests)
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
 
 permissions:
   contents: read
@@ -50,20 +58,22 @@ jobs:
           inputs.confirm_live_costs == true &&
           (inputs.provider == 'all' || inputs.provider == 'linode') }}
     runs-on: ubuntu-24.04
+    environment: marketplace-live-tests
     timeout-minutes: 90
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
-      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
-      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
-      LINODE_REGION: ${{ vars.LINODE_REGION }}
-      LINODE_TYPE: ${{ vars.LINODE_TYPE }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y dnsutils jq
       - name: Run Linode live test
         run: ./scripts/live-provider-test.sh linode
+        env:
+          DIGITALOCEAN_DNS_TOKEN: ${{ secrets.DIGITALOCEAN_DNS_TOKEN }}
+          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+          TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+          TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+          TEST_ACME_ENVIRONMENT: ${{ inputs.acme_environment }}
+          LINODE_REGION: ${{ vars.LINODE_REGION }}
+          LINODE_TYPE: ${{ vars.LINODE_TYPE }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -80,20 +90,25 @@ jobs:
           inputs.confirm_live_costs == true &&
           (inputs.provider == 'all' || inputs.provider == 'digitalocean') }}
     runs-on: ubuntu-24.04
+    environment: marketplace-live-tests
     timeout-minutes: 90
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
-      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
-      DIGITALOCEAN_REGION: ${{ vars.DIGITALOCEAN_REGION }}
-      DIGITALOCEAN_SIZE: ${{ vars.DIGITALOCEAN_SIZE }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
+        with:
+          version: 1.16.0
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y dnsutils jq
       - name: Run DigitalOcean live test
         run: ./scripts/live-provider-test.sh digitalocean
+        env:
+          DIGITALOCEAN_DNS_TOKEN: ${{ secrets.DIGITALOCEAN_DNS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+          TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+          TEST_ACME_ENVIRONMENT: ${{ inputs.acme_environment }}
+          DIGITALOCEAN_REGION: ${{ vars.DIGITALOCEAN_REGION }}
+          DIGITALOCEAN_SIZE: ${{ vars.DIGITALOCEAN_SIZE }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -110,21 +125,23 @@ jobs:
           inputs.confirm_live_costs == true &&
           (inputs.provider == 'all' || inputs.provider == 'vultr') }}
     runs-on: ubuntu-24.04
+    environment: marketplace-live-tests
     timeout-minutes: 90
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
-      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
-      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
-      VULTR_MARKETPLACE_IMAGE_ID: ${{ vars.VULTR_MARKETPLACE_IMAGE_ID }}
-      VULTR_REGION: ${{ vars.VULTR_REGION }}
-      VULTR_PLAN: ${{ vars.VULTR_PLAN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y dnsutils jq
       - name: Run Vultr live test
         run: ./scripts/live-provider-test.sh vultr
+        env:
+          DIGITALOCEAN_DNS_TOKEN: ${{ secrets.DIGITALOCEAN_DNS_TOKEN }}
+          VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
+          TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+          TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+          TEST_ACME_ENVIRONMENT: ${{ inputs.acme_environment }}
+          VULTR_MARKETPLACE_IMAGE_ID: ${{ vars.VULTR_MARKETPLACE_IMAGE_ID }}
+          VULTR_REGION: ${{ vars.VULTR_REGION }}
+          VULTR_PLAN: ${{ vars.VULTR_PLAN }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -141,19 +158,21 @@ jobs:
           inputs.confirm_live_costs == true &&
           (inputs.provider == 'all' || inputs.provider == 'hostinger') }}
     runs-on: ubuntu-24.04
+    environment: marketplace-live-tests
     timeout-minutes: 90
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
-      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
-      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
-      HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y dnsutils jq
       - name: Run Hostinger live test
         run: ./scripts/live-provider-test.sh hostinger
+        env:
+          DIGITALOCEAN_DNS_TOKEN: ${{ secrets.DIGITALOCEAN_DNS_TOKEN }}
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+          TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+          TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+          TEST_ACME_ENVIRONMENT: ${{ inputs.acme_environment }}
+          HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -170,21 +189,25 @@ jobs:
           inputs.confirm_live_costs == true &&
           (inputs.provider == 'all' || inputs.provider == 'hetzner') }}
     runs-on: ubuntu-24.04
+    environment: marketplace-live-tests
     timeout-minutes: 90
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      HETZNER_TOKEN: ${{ secrets.HETZNER_TOKEN }}
-      TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
-      TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
-      HETZNER_LOCATION: ${{ vars.HETZNER_LOCATION }}
-      HETZNER_SERVER_TYPE: ${{ vars.HETZNER_SERVER_TYPE }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
+        with:
+          version: 1.16.0
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y dnsutils jq
       - name: Run Hetzner live test
         run: ./scripts/live-provider-test.sh hetzner
+        env:
+          DIGITALOCEAN_DNS_TOKEN: ${{ secrets.DIGITALOCEAN_DNS_TOKEN }}
+          HETZNER_TOKEN: ${{ secrets.HETZNER_TOKEN }}
+          TEST_DNS_ZONE: ${{ vars.TEST_DNS_ZONE }}
+          TEST_ACME_EMAIL: ${{ vars.TEST_ACME_EMAIL }}
+          TEST_ACME_ENVIRONMENT: ${{ inputs.acme_environment }}
+          HETZNER_LOCATION: ${{ vars.HETZNER_LOCATION }}
+          HETZNER_SERVER_TYPE: ${{ vars.HETZNER_SERVER_TYPE }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -36,6 +36,11 @@ HOSTINGER_PROJECT=""
 HOSTINGER_PROJECT_CREATED=false
 PUBLIC_IP=""
 SSH_KEY_PATH=""
+CLEANUP_FAILURES=0
+TEST_BODY_COMPLETE=false
+ACME_CA_SERVER=""
+TLS_DESCRIPTION=""
+declare -a HTTPS_CURL_ARGS=()
 
 log() {
   printf '[%s] %s\n' "${PROVIDER}" "$*"
@@ -95,9 +100,76 @@ delete_resource() {
     --header 'Content-Type: application/json' \
     "${url}" || true)"
   case "${response_code}" in
-    2??|404) log "Removed ${label}." ;;
-    *) log "WARNING: cleanup of ${label} returned HTTP ${response_code}." ;;
+    2??|404) log "Deletion accepted for ${label}." ;;
+    *)
+      log "ERROR: cleanup of ${label} returned HTTP ${response_code}."
+      return 1
+      ;;
   esac
+}
+
+wait_for_resource_absent() {
+  local label=$1
+  local url=$2
+  local token=$3
+  local attempt
+  local response_code
+
+  for attempt in {1..60}; do
+    response_code="$(curl \
+      --silent \
+      --show-error \
+      --output /dev/null \
+      --write-out '%{http_code}' \
+      --header "Authorization: Bearer ${token}" \
+      "${url}" || true)"
+    if [[ ${response_code} == 404 ]]; then
+      log "Verified ${label} is absent."
+      return 0
+    fi
+    if [[ ! ${response_code} =~ ^2[0-9][0-9]$ ]]; then
+      log "ERROR: verification of ${label} returned HTTP ${response_code}."
+      return 1
+    fi
+    sleep 5
+  done
+  log "ERROR: ${label} still exists after cleanup timeout."
+  return 1
+}
+
+cleanup_resource() {
+  local label=$1
+  local url=$2
+  local token=$3
+
+  if ! delete_resource "${label}" "${url}" "${token}" ||
+     ! wait_for_resource_absent "${label}" "${url}" "${token}"; then
+    CLEANUP_FAILURES=$((CLEANUP_FAILURES + 1))
+  fi
+}
+
+wait_for_hostinger_project_absent() {
+  local attempt
+  local response
+
+  for attempt in {1..60}; do
+    if ! response="$(request_json \
+      GET \
+      "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/docker" \
+      "${HOSTINGER_API_TOKEN}")"; then
+      log "ERROR: Hostinger project-list cleanup verification failed."
+      return 1
+    fi
+    if jq -e --arg name "${HOSTINGER_PROJECT}" \
+      '[.[] | select(.name == $name)] | length == 0' \
+      <<<"${response}" >/dev/null; then
+      log "Verified Hostinger project ${HOSTINGER_PROJECT} is absent."
+      return 0
+    fi
+    sleep 5
+  done
+  log "ERROR: Hostinger project ${HOSTINGER_PROJECT} still exists after cleanup timeout."
+  return 1
 }
 
 cleanup() {
@@ -108,13 +180,13 @@ cleanup() {
   case "${PROVIDER}" in
     linode)
       if [[ -n ${INSTANCE_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Linode ${INSTANCE_ID}" \
           "https://api.linode.com/v4/linode/instances/${INSTANCE_ID}" \
           "${LINODE_TOKEN}"
       fi
       if [[ -n ${STACKSCRIPT_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "StackScript ${STACKSCRIPT_ID}" \
           "https://api.linode.com/v4/linode/stackscripts/${STACKSCRIPT_ID}" \
           "${LINODE_TOKEN}"
@@ -122,19 +194,19 @@ cleanup() {
       ;;
     digitalocean)
       if [[ -n ${INSTANCE_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "DigitalOcean Droplet ${INSTANCE_ID}" \
           "https://api.digitalocean.com/v2/droplets/${INSTANCE_ID}" \
           "${DIGITALOCEAN_TOKEN}"
       fi
       if [[ -n ${SNAPSHOT_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "DigitalOcean snapshot ${SNAPSHOT_ID}" \
           "https://api.digitalocean.com/v2/images/${SNAPSHOT_ID}" \
           "${DIGITALOCEAN_TOKEN}"
       fi
       if [[ -n ${SSH_KEY_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "DigitalOcean SSH key ${SSH_KEY_ID}" \
           "https://api.digitalocean.com/v2/account/keys/${SSH_KEY_ID}" \
           "${DIGITALOCEAN_TOKEN}"
@@ -142,13 +214,13 @@ cleanup() {
       ;;
     vultr)
       if [[ -n ${INSTANCE_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Vultr instance ${INSTANCE_ID}" \
           "https://api.vultr.com/v2/instances/${INSTANCE_ID}" \
           "${VULTR_API_KEY}"
       fi
       if [[ -n ${SSH_KEY_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Vultr SSH key ${SSH_KEY_ID}" \
           "https://api.vultr.com/v2/ssh-keys/${SSH_KEY_ID}" \
           "${VULTR_API_KEY}"
@@ -156,28 +228,38 @@ cleanup() {
       ;;
     hostinger)
       if [[ ${HOSTINGER_PROJECT_CREATED} == true ]]; then
-        request_json \
+        local hostinger_cleanup_response
+        local hostinger_cleanup_action
+        hostinger_cleanup_response="$(request_json \
           DELETE \
           "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/docker/${HOSTINGER_PROJECT}/down" \
-          "${HOSTINGER_API_TOKEN}" \
-          >/dev/null || log "WARNING: Hostinger project cleanup failed."
+          "${HOSTINGER_API_TOKEN}" 2>/dev/null)"
+        hostinger_cleanup_action="$(jq -r '.id // empty' <<<"${hostinger_cleanup_response}")"
+        if [[ ! ${hostinger_cleanup_action} =~ ^[0-9]+$ ]] ||
+           ! poll_hostinger_action "${hostinger_cleanup_action}" ||
+           ! wait_for_hostinger_project_absent; then
+          log "ERROR: Hostinger project cleanup could not be verified."
+          CLEANUP_FAILURES=$((CLEANUP_FAILURES + 1))
+        else
+          log "Verified Hostinger project cleanup completed."
+        fi
       fi
       ;;
     hetzner)
       if [[ -n ${INSTANCE_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Hetzner server ${INSTANCE_ID}" \
           "https://api.hetzner.cloud/v1/servers/${INSTANCE_ID}" \
           "${HETZNER_TOKEN}"
       fi
       if [[ -n ${SNAPSHOT_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Hetzner snapshot ${SNAPSHOT_ID}" \
           "https://api.hetzner.cloud/v1/images/${SNAPSHOT_ID}" \
           "${HETZNER_TOKEN}"
       fi
       if [[ -n ${SSH_KEY_ID} ]]; then
-        delete_resource \
+        cleanup_resource \
           "Hetzner SSH key ${SSH_KEY_ID}" \
           "https://api.hetzner.cloud/v1/ssh_keys/${SSH_KEY_ID}" \
           "${HETZNER_TOKEN}"
@@ -186,26 +268,44 @@ cleanup() {
   esac
 
   if [[ -n ${DNS_RECORD_ID} ]]; then
-    delete_resource \
+    cleanup_resource \
       "DigitalOcean DNS record ${DNS_RECORD_ID}" \
       "https://api.digitalocean.com/v2/domains/${TEST_DNS_ZONE}/records/${DNS_RECORD_ID}" \
-      "${DIGITALOCEAN_TOKEN}"
+      "${DIGITALOCEAN_DNS_TOKEN}"
   fi
   if [[ -n ${SSH_KEY_PATH} ]]; then
     rm -f -- "${SSH_KEY_PATH}" "${SSH_KEY_PATH}.pub"
   fi
 
+  if ((CLEANUP_FAILURES > 0)); then
+    exit_code=1
+  fi
+  write_report "${exit_code}" "${CLEANUP_FAILURES}"
   exit "${exit_code}"
 }
 trap cleanup EXIT
 
 validate_common_configuration() {
-  require_env DIGITALOCEAN_TOKEN TEST_DNS_ZONE TEST_ACME_EMAIL
+  require_env DIGITALOCEAN_DNS_TOKEN TEST_DNS_ZONE TEST_ACME_EMAIL
   [[ ${TEST_DNS_ZONE} =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] \
     || fail "TEST_DNS_ZONE must be a lower-case public DNS zone."
   [[ ${TEST_ACME_EMAIL} =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$ ]] \
     || fail "TEST_ACME_EMAIL is not a valid email address."
   [[ ${#RECORD_LABEL} -le 63 ]] || fail "Generated DNS label is too long."
+
+  case "${TEST_ACME_ENVIRONMENT:-staging}" in
+    staging)
+      ACME_CA_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory
+      TLS_DESCRIPTION="Let's Encrypt staging TLS (untrusted by design)"
+      HTTPS_CURL_ARGS=(--insecure)
+      ;;
+    production)
+      ACME_CA_SERVER=https://acme-v02.api.letsencrypt.org/directory
+      TLS_DESCRIPTION="trusted Let's Encrypt production TLS"
+      HTTPS_CURL_ARGS=()
+      ;;
+    *) fail "TEST_ACME_ENVIRONMENT must be staging or production." ;;
+  esac
 }
 
 create_ssh_key() {
@@ -221,14 +321,14 @@ create_dns_record() {
   existing="$(request_json \
     GET \
     "https://api.digitalocean.com/v2/domains/${TEST_DNS_ZONE}/records?type=A&name=${FQDN}" \
-    "${DIGITALOCEAN_TOKEN}")"
+    "${DIGITALOCEAN_DNS_TOKEN}")"
   [[ $(jq '.domain_records | length' <<<"${existing}") -eq 0 ]] \
     || fail "Refusing to replace an existing DNS record for ${FQDN}."
 
   response="$(request_json \
     POST \
     "https://api.digitalocean.com/v2/domains/${TEST_DNS_ZONE}/records" \
-    "${DIGITALOCEAN_TOKEN}" \
+    "${DIGITALOCEAN_DNS_TOKEN}" \
     "$(jq -n \
       --arg name "${RECORD_LABEL}" \
       --arg data "${PUBLIC_IP}" \
@@ -260,7 +360,7 @@ wait_for_dns() {
 wait_for_https() {
   local attempt
   for attempt in {1..120}; do
-    if curl \
+    if curl "${HTTPS_CURL_ARGS[@]}" \
       --fail \
       --silent \
       --show-error \
@@ -272,20 +372,37 @@ wait_for_https() {
     fi
     sleep 10
   done
-  fail "Trusted HTTPS did not become ready at ${FQDN}."
+  fail "HTTPS did not become ready at ${FQDN}."
 }
 
 verify_public_endpoints() {
   local api_status
+  local http_headers
+  local http_location
+  local http_status
 
-  curl --fail --silent --show-error "https://${FQDN}/" >/dev/null
+  http_headers="$(curl \
+    --silent \
+    --show-error \
+    --dump-header - \
+    --output /dev/null \
+    --max-time 15 \
+    "http://${FQDN}/")"
+  http_status="$(awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' <<<"${http_headers}")"
+  http_location="$(awk 'BEGIN {IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' <<<"${http_headers}")"
+  [[ ${http_status} =~ ^30[1278]$ && ${http_location} == "https://${FQDN}"* ]] \
+    || fail "HTTP did not redirect to HTTPS (status ${http_status:-missing})."
+
+  curl "${HTTPS_CURL_ARGS[@]}" --fail --silent --show-error "https://${FQDN}/" >/dev/null
   curl \
+    "${HTTPS_CURL_ARGS[@]}" \
     --fail \
     --silent \
     --show-error \
     "https://${FQDN}/oauth2/.well-known/openid-configuration" \
     >/dev/null
   api_status="$(curl \
+    "${HTTPS_CURL_ARGS[@]}" \
     --silent \
     --show-error \
     --output /dev/null \
@@ -293,7 +410,86 @@ verify_public_endpoints() {
     "https://${FQDN}/api/users")"
   [[ ${api_status} == 401 || ${api_status} == 403 ]] \
     || fail "Unauthenticated API returned HTTP ${api_status}."
-  log "Dashboard, OIDC, authenticated API boundary, and trusted TLS passed."
+  log "HTTP redirect, dashboard, OIDC, authenticated API boundary, and ${TLS_DESCRIPTION} passed."
+}
+
+verify_public_stun() {
+  python3 - "${PUBLIC_IP}" <<'PY'
+import os
+import socket
+import struct
+import sys
+
+server = (sys.argv[1], 3478)
+transaction_id = os.urandom(12)
+request = struct.pack("!HHI12s", 0x0001, 0, 0x2112A442, transaction_id)
+
+for _ in range(5):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+        client.settimeout(5)
+        client.sendto(request, server)
+        try:
+            response, source = client.recvfrom(2048)
+        except socket.timeout:
+            continue
+    if source[0] != server[0] or len(response) < 20:
+        continue
+    message_type, length, cookie, response_id = struct.unpack("!HHI12s", response[:20])
+    if (
+        message_type == 0x0101
+        and cookie == 0x2112A442
+        and response_id == transaction_id
+        and len(response) >= 20 + length
+    ):
+        sys.exit(0)
+
+raise SystemExit("No valid RFC 5389 STUN binding response received")
+PY
+  log "External UDP STUN binding passed."
+  verify_public_protocol_routes
+}
+
+verify_public_protocol_routes() {
+  local grpc_headers
+  local grpc_status
+  local grpc_type
+  local relay_headers
+  local relay_status
+
+  grpc_headers="$(printf '\0\0\0\0\0' | curl \
+    "${HTTPS_CURL_ARGS[@]}" \
+    --http2 \
+    --silent \
+    --show-error \
+    --request POST \
+    --header 'Content-Type: application/grpc' \
+    --data-binary @- \
+    --dump-header - \
+    --output /dev/null \
+    --max-time 15 \
+    "https://${FQDN}/management.ManagementService/GetServerKey")"
+  grpc_status="$(awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' <<<"${grpc_headers}")"
+  grpc_type="$(awk 'BEGIN {IGNORECASE=1} /^content-type:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' <<<"${grpc_headers}")"
+  [[ ${grpc_status} == 200 && ${grpc_type} == application/grpc* ]] \
+    || fail "The public management gRPC route did not return gRPC over HTTP/2."
+
+  relay_headers="$({ curl \
+    "${HTTPS_CURL_ARGS[@]}" \
+    --http1.1 \
+    --silent \
+    --request GET \
+    --header 'Connection: Upgrade' \
+    --header 'Upgrade: websocket' \
+    --header 'Sec-WebSocket-Version: 13' \
+    --header 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+    --dump-header - \
+    --output /dev/null \
+    --max-time 3 \
+    "https://${FQDN}/relay" || true; })"
+  relay_status="$(awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' <<<"${relay_headers}")"
+  [[ ${relay_status} == 101 ]] \
+    || fail "The public relay route did not accept a WebSocket upgrade."
+  log "External management gRPC and relay WebSocket routes passed."
 }
 
 wait_for_ssh() {
@@ -370,17 +566,70 @@ REMOTE
   log "Limited-user SSH, host hardening, Compose hash, containers, and UDP 3478 passed."
 }
 
+verify_installer_idempotence() {
+  local credentials_file=.netbird-access.txt
+
+  if [[ ${PROVIDER} == linode ]]; then
+    credentials_file=.credentials
+  fi
+  ssh_command "${ADMIN_USER}" bash -s -- \
+    "${credentials_file}" "${PROVIDER}" "${FQDN}" "${TEST_ACME_EMAIL}" \
+    "${ACME_CA_SERVER}" "${ADMIN_USER}" <<'REMOTE'
+set -Eeuo pipefail
+credentials_file=$1
+provider=$2
+fqdn=$3
+acme_email=$4
+acme_ca_server=$5
+admin_user=$6
+credentials_path="${HOME}/${credentials_file}"
+sudo_password="$(sed -n 's/^Sudo Password: //p' "${credentials_path}")"
+test -n "${sudo_password}"
+sudo_run() {
+  printf '%s\n' "${sudo_password}" | sudo -S -p '' "$@"
+}
+state_hash() {
+  sudo_run sha256sum \
+    /var/lib/netbird-one-click/sudo-password \
+    /opt/netbird/.env \
+    /var/lib/docker/volumes/netbird_config/_data/config.yaml
+}
+before="$(state_hash)"
+sudo_run env \
+  MARKETPLACE_PROVIDER="${provider}" \
+  NETBIRD_FQDN="${fqdn}" \
+  NETBIRD_ACME_EMAIL="${acme_email}" \
+  NETBIRD_ACME_CA_SERVER="${acme_ca_server}" \
+  NETBIRD_ADMIN_USER="${admin_user}" \
+  NETBIRD_DISABLE_ROOT_SSH=true \
+  /opt/netbird-one-clicks/getting-started.sh \
+    --provider "${provider}" \
+    --non-interactive
+after="$(state_hash)"
+test "${before}" = "${after}"
+REMOTE
+  log "A repeat installer run preserved credentials and NetBird state."
+}
+
 write_report() {
+  local exit_code=${1:-1}
+  local cleanup_failures=${2:-0}
+  local result=failed
+
+  if [[ ${exit_code} -eq 0 && ${TEST_BODY_COMPLETE} == true ]]; then
+    result=passed
+  fi
   cat >"${REPORT_FILE}" <<EOF
 # ${PROVIDER} GitHub Actions live-test report
 
-- Result: passed
+- Result: ${result}
 - UTC time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
 - Commit: ${GITHUB_SHA:-local}
-- Hostname: ${FQDN}
-- Provider IPv4: ${PUBLIC_IP}
+- Hostname: ${FQDN:-unavailable}
+- Provider IPv4: ${PUBLIC_IP:-unavailable}
 - DNS provider: DigitalOcean
-- Cleanup: requested automatically by the EXIT trap
+- ACME environment: ${TEST_ACME_ENVIRONMENT:-staging}
+- Cleanup: verified (${cleanup_failures} failures)
 EOF
 }
 
@@ -398,11 +647,36 @@ poll_hostinger_action() {
     action_state="$(jq -r '.state' <<<"${response}")"
     case "${action_state}" in
       success) return 0 ;;
-      error) fail "Hostinger action ${action_id} failed." ;;
+      error)
+        log "ERROR: Hostinger action ${action_id} failed."
+        return 1
+        ;;
     esac
     sleep 10
   done
-  fail "Hostinger action ${action_id} timed out."
+  log "ERROR: Hostinger action ${action_id} timed out."
+  return 1
+}
+
+deploy_hostinger_project() {
+  local response
+  local action_id
+
+  # The name is deterministic, so cleanup can reconcile the project even if
+  # the create request succeeds but its response is lost.
+  HOSTINGER_PROJECT_CREATED=true
+  response="$(request_json \
+    POST \
+    "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/docker" \
+    "${HOSTINGER_API_TOKEN}" \
+    "$(jq -n \
+      --arg project_name "${HOSTINGER_PROJECT}" \
+      --rawfile content "${ROOT_DIR}/marketplaces/hostinger/docker-compose.yml" \
+      --arg environment "NETBIRD_FQDN=${FQDN}\nNETBIRD_ACME_EMAIL=${TEST_ACME_EMAIL}\nNETBIRD_ACME_CA_SERVER=${ACME_CA_SERVER}" \
+      '{project_name:$project_name, content:$content, environment:$environment}')")"
+  action_id="$(jq -r '.id' <<<"${response}")"
+  [[ ${action_id} =~ ^[0-9]+$ ]] || fail "Hostinger did not return a project action ID."
+  poll_hostinger_action "${action_id}" || fail "Hostinger project deployment failed."
 }
 
 test_linode() {
@@ -418,10 +692,14 @@ test_linode() {
   require_env LINODE_TOKEN GITHUB_REPOSITORY GITHUB_SHA
   create_ssh_key
 
-  awk -v repository="${repository}" -v release_ref="${release_ref}" '
+  awk \
+    -v repository="${repository}" \
+    -v release_ref="${release_ref}" \
+    -v acme_ca_server="${ACME_CA_SERVER}" '
     NR == 2 {
       printf "export ONECLICKS_REPOSITORY=\047%s\047\n", repository
       printf "export ONECLICKS_REF=\047%s\047\n", release_ref
+      printf "export NETBIRD_ACME_CA_SERVER=\047%s\047\n", acme_ca_server
     }
     { print }
   ' "${ROOT_DIR}/marketplaces/linode/stackscript.sh" >"${script_file}"
@@ -476,6 +754,11 @@ test_linode() {
   wait_for_dns
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
+  verify_server_host
+  verify_installer_idempotence
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 
   request_json \
@@ -485,6 +768,8 @@ test_linode() {
     '{}' >/dev/null
   sleep 20
   wait_for_https
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 }
 
@@ -552,11 +837,16 @@ test_digitalocean() {
   wait_for_dns
   wait_for_ssh root
   printf -v remote_command \
-    'cloud-init status --wait && env MARKETPLACE_PROVIDER=digitalocean NETBIRD_FQDN=%q NETBIRD_ACME_EMAIL=%q NETBIRD_ADMIN_USER=%q NETBIRD_DISABLE_ROOT_SSH=true /opt/netbird-one-clicks/getting-started.sh --provider digitalocean --non-interactive' \
-    "${FQDN}" "${TEST_ACME_EMAIL}" "${ADMIN_USER}"
+    'cloud-init status --wait && env MARKETPLACE_PROVIDER=digitalocean NETBIRD_FQDN=%q NETBIRD_ACME_EMAIL=%q NETBIRD_ACME_CA_SERVER=%q NETBIRD_ADMIN_USER=%q NETBIRD_DISABLE_ROOT_SSH=true /opt/netbird-one-clicks/getting-started.sh --provider digitalocean --non-interactive' \
+    "${FQDN}" "${TEST_ACME_EMAIL}" "${ACME_CA_SERVER}" "${ADMIN_USER}"
   ssh_command root "${remote_command}"
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
+  verify_server_host
+  verify_installer_idempotence
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 
   request_json \
@@ -566,6 +856,8 @@ test_digitalocean() {
     '{"type":"reboot"}' >/dev/null
   sleep 20
   wait_for_https
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 }
 
@@ -602,7 +894,8 @@ test_vultr() {
       --arg ssh_key "${SSH_KEY_ID}" \
       --arg domain "${FQDN}" \
       --arg email "${TEST_ACME_EMAIL}" \
-      '{region:$region, plan:$plan, image_id:$image_id, label:$label, hostname:$hostname, ssh_key_ids:[$ssh_key], app_variables:{nb_domain:$domain, acme_email:$email, admin_user:"netbirdci"}, user_scheme:"root", activation_email:false}')")"
+      --arg acme_ca "${ACME_CA_SERVER}" \
+      '{region:$region, plan:$plan, image_id:$image_id, label:$label, hostname:$hostname, ssh_key_ids:[$ssh_key], app_variables:{nb_domain:$domain, acme_email:$email, acme_ca:$acme_ca, admin_user:"netbirdci"}, user_scheme:"root", activation_email:false}')")"
   INSTANCE_ID="$(jq -r '.instance.id' <<<"${response}")"
   [[ -n ${INSTANCE_ID} && ${INSTANCE_ID} != null ]] || fail "Vultr did not return an instance ID."
 
@@ -625,6 +918,11 @@ test_vultr() {
   wait_for_dns
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
+  verify_server_host
+  verify_installer_idempotence
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 
   request_json \
@@ -634,6 +932,8 @@ test_vultr() {
     '{}' >/dev/null
   sleep 20
   wait_for_https
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 }
 
@@ -658,22 +958,11 @@ test_hostinger() {
 
   create_dns_record
   wait_for_dns
-  response="$(request_json \
-    POST \
-    "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/docker" \
-    "${HOSTINGER_API_TOKEN}" \
-    "$(jq -n \
-      --arg project_name "${HOSTINGER_PROJECT}" \
-      --rawfile content "${ROOT_DIR}/marketplaces/hostinger/docker-compose.yml" \
-      --arg environment "NETBIRD_FQDN=${FQDN}\nNETBIRD_ACME_EMAIL=${TEST_ACME_EMAIL}" \
-      '{project_name:$project_name, content:$content, environment:$environment}')")"
-  HOSTINGER_PROJECT_CREATED=true
-  action_id="$(jq -r '.id' <<<"${response}")"
-  [[ ${action_id} =~ ^[0-9]+$ ]] || fail "Hostinger did not return a project action ID."
-  poll_hostinger_action "${action_id}"
+  deploy_hostinger_project
 
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
   response="$(request_json \
     GET \
     "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/docker/${HOSTINGER_PROJECT}/containers" \
@@ -683,6 +972,12 @@ test_hostinger() {
   [[ $(jq '[.[] | select(.name == "netbird-traefik" or .name == "netbird-dashboard" or .name == "netbird-server")] | length' <<<"${response}") -eq 3 ]] \
     || fail "Hostinger did not report all three long-running containers."
 
+  deploy_hostinger_project
+  wait_for_https
+  verify_public_endpoints
+  verify_public_stun
+  log "A repeat Hostinger project deployment passed."
+
   response="$(request_json \
     POST \
     "${HOSTINGER_API_BASE}/virtual-machines/${HOSTINGER_VM_ID}/restart" \
@@ -690,10 +985,11 @@ test_hostinger() {
     '{}')"
   action_id="$(jq -r '.id' <<<"${response}")"
   [[ ${action_id} =~ ^[0-9]+$ ]] || fail "Hostinger did not return a reboot action ID."
-  poll_hostinger_action "${action_id}"
+  poll_hostinger_action "${action_id}" || fail "Hostinger reboot failed."
   sleep 20
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
 }
 
 test_hetzner() {
@@ -732,6 +1028,7 @@ test_hetzner() {
   "${ROOT_DIR}/marketplaces/hetzner/render-user-data.sh" \
     --domain "${FQDN}" \
     --email "${TEST_ACME_EMAIL}" \
+    --acme-ca-server "${ACME_CA_SERVER}" \
     --admin-user "${ADMIN_USER}" \
     >"${user_data_file}"
   response="$(request_json \
@@ -767,6 +1064,11 @@ test_hetzner() {
   wait_for_dns
   wait_for_https
   verify_public_endpoints
+  verify_public_stun
+  verify_server_host
+  verify_installer_idempotence
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 
   request_json \
@@ -776,6 +1078,8 @@ test_hetzner() {
     '{}' >/dev/null
   sleep 20
   wait_for_https
+  verify_public_endpoints
+  verify_public_stun
   verify_server_host
 }
 
@@ -791,5 +1095,5 @@ case "${PROVIDER}" in
   hetzner) test_hetzner ;;
 esac
 
-write_report
+TEST_BODY_COMPLETE=true
 log "Live test passed."

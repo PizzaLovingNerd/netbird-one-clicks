@@ -49,6 +49,7 @@ usage() {
     '  --provider NAME       generic, linode, digitalocean, vultr, or hetzner' \
     '  --domain FQDN         public NetBird hostname' \
     '  --email ADDRESS       Let'\''s Encrypt email' \
+    '  --acme-ca-server URL  official Let'\''s Encrypt directory URL' \
     '  --admin-user NAME     limited sudo username' \
     '  --dns-zone ZONE       provider DNS zone when using NETBIRD_DNS_TOKEN' \
     '  --keep-root-ssh       do not disable direct root SSH' \
@@ -111,6 +112,7 @@ collect_inputs() {
   MARKETPLACE_PROVIDER="${MARKETPLACE_PROVIDER:-generic}"
   NETBIRD_ADMIN_USER="${NETBIRD_ADMIN_USER:-netbirdadmin}"
   NETBIRD_DISABLE_ROOT_SSH="${NETBIRD_DISABLE_ROOT_SSH:-true}"
+  NETBIRD_ACME_CA_SERVER="${NETBIRD_ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}"
   NETBIRD_DNS_TOKEN="${NETBIRD_DNS_TOKEN:-}"
   NETBIRD_DNS_ZONE="${NETBIRD_DNS_ZONE:-}"
 
@@ -143,6 +145,7 @@ collect_inputs() {
   export MARKETPLACE_PROVIDER
   export NETBIRD_FQDN
   export NETBIRD_ACME_EMAIL
+  export NETBIRD_ACME_CA_SERVER
   export NETBIRD_ADMIN_USER
   export NETBIRD_DISABLE_ROOT_SSH
   export NETBIRD_DNS_TOKEN
@@ -172,6 +175,11 @@ while (($# > 0)); do
     --email)
       [[ $# -ge 2 ]] || fail "--email requires a value."
       NETBIRD_ACME_EMAIL=$2
+      shift 2
+      ;;
+    --acme-ca-server)
+      [[ $# -ge 2 ]] || fail "--acme-ca-server requires a value."
+      NETBIRD_ACME_CA_SERVER=$2
       shift 2
       ;;
     --admin-user)

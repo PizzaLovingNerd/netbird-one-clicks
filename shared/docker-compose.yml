@@ -81,6 +81,7 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - "--certificatesresolvers.letsencrypt.acme.email=${NETBIRD_ACME_EMAIL:?Set NETBIRD_ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.caserver=${NETBIRD_ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}"
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
       - --serverstransport.forwardingtimeouts.responseheadertimeout=0s

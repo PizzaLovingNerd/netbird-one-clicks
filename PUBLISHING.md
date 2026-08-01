@@ -5,7 +5,8 @@ DigitalOcean, Vultr, Hostinger, and Hetzner Cloud. Provider guidance was
 rechecked against official sources on 2026-07-31.
 
 Run release candidates through the disabled-by-default live workflow in
-`TESTS.md` before completing the provider steps below.
+`TESTS.md` before completing the provider steps below. Use ACME staging for
+development runs and select `production` for the final release-candidate run.
 
 Marketplace approval cannot be guaranteed by repository checks. Vendor
 enrollment, agreements, brand approval, portal access, screenshots, and human
@@ -42,9 +43,10 @@ Do not submit any provider until every applicable item is complete.
 - [ ] Container and installer versions match `docs/COMPONENTS.md`.
 - [ ] No token, private key, `.env` file, Packer log, cloud-init log, or live
   credential file is tracked. `build/` must remain ignored.
-- [ ] Each final artifact passes DNS, trusted TLS, dashboard, OIDC, API auth,
-  UDP 3478, limited-user SSH where applicable, repeat installation, and reboot
-  persistence checks.
+- [ ] Each final artifact passes DNS, HTTP redirect, production trusted TLS,
+  dashboard, OIDC, API auth, management gRPC, relay WebSocket, external UDP
+  3478 STUN, limited-user SSH where applicable, repeat installation, and
+  reboot persistence checks.
 - [ ] The release notes describe every version and security change.
 
 ### Publish the immutable source release

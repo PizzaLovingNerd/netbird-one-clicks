@@ -62,6 +62,16 @@
         )
     fail_msg: NETBIRD_ACME_EMAIL must be a valid email address.
 
+- name: Validate the ACME directory
+  ansible.builtin.assert:
+    that:
+      - netbird_acme_ca_server in
+        ['https://acme-v02.api.letsencrypt.org/directory',
+         'https://acme-staging-v02.api.letsencrypt.org/directory']
+    fail_msg: >-
+      NETBIRD_ACME_CA_SERVER must be an official Let's Encrypt production or
+      staging directory URL.
+
 - name: Validate the limited administrator username
   ansible.builtin.assert:
     that:

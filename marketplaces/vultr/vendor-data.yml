@@ -41,6 +41,10 @@ write_files:
       export MARKETPLACE_PROVIDER=vultr
       export NETBIRD_FQDN="$(metadata_value nb_domain)"
       export NETBIRD_ACME_EMAIL="$(metadata_value acme_email)"
+      export NETBIRD_ACME_CA_SERVER="$(
+        metadata_value acme_ca 2>/dev/null ||
+          printf https://acme-v02.api.letsencrypt.org/directory
+      )"
       export NETBIRD_ADMIN_USER="$(
         metadata_value admin_user 2>/dev/null || printf netbirdadmin
       )"

@@ -14,6 +14,10 @@ pin changes.
 | Docker Engine and Compose | Current signed Ubuntu-repository release at image build or deployment | Container runtime | [Apache-2.0](https://github.com/docker/docker-ce/blob/master/LICENSE) |
 | Ubuntu | 24.04 LTS; 26.04 LTS where the provider accepts it | Host operating system | [Ubuntu licensing](https://ubuntu.com/legal/intellectual-property-policy) |
 
+CI and image builds pin Packer `1.16.0`, the DigitalOcean plugin `1.4.1`, and
+the Hetzner Cloud plugin `1.7.2`. Update these deliberately and validate both
+image definitions when changing the build toolchain.
+
 The DigitalOcean and Hetzner images contain the provisioning source and its
 Python virtual environment so the installation can be audited and safely
 rerun. Linode and Vultr retain the checked-out release payload but remove Git

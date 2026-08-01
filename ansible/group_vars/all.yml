@@ -7,6 +7,9 @@ netbird_fqdn: >-
   {{ lookup('ansible.builtin.env', 'NETBIRD_FQDN') | lower }}
 netbird_acme_email: >-
   {{ lookup('ansible.builtin.env', 'NETBIRD_ACME_EMAIL') }}
+netbird_acme_ca_server: >-
+  {{ lookup('ansible.builtin.env', 'NETBIRD_ACME_CA_SERVER')
+     | default('https://acme-v02.api.letsencrypt.org/directory', true) }}
 netbird_admin_user: >-
   {{ lookup('ansible.builtin.env', 'NETBIRD_ADMIN_USER')
      | default('netbirdadmin', true) | lower }}

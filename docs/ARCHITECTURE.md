@@ -101,6 +101,7 @@ Provider-specific fields are translated once, at the edge, into this contract:
 | `MARKETPLACE_PROVIDER` | No | `generic`, `linode`, `digitalocean`, `vultr`, or `hetzner` |
 | `NETBIRD_FQDN` | Yes | Public NetBird hostname |
 | `NETBIRD_ACME_EMAIL` | Yes | Let's Encrypt account email |
+| `NETBIRD_ACME_CA_SERVER` | No | Official Let's Encrypt directory; defaults to production, with staging supported for CI |
 | `NETBIRD_ADMIN_USER` | No | Limited sudo user; defaults to `netbirdadmin` |
 | `NETBIRD_DISABLE_ROOT_SSH` | No | Disable direct root SSH after copying the provider key; defaults to `true` |
 | `NETBIRD_DNS_TOKEN` | No | Ephemeral provider DNS credential |
@@ -120,8 +121,9 @@ Examples of boundary translation:
 - Hetzner accepts the names through generated cloud-init user data or collects
   them at the first interactive root login. Its public IPv4 is read from the
   link-local Hetzner metadata service.
-- Hostinger supplies `NETBIRD_FQDN` and `NETBIRD_ACME_EMAIL` directly to
-  Compose; it does not run the host contract.
+- Hostinger supplies `NETBIRD_FQDN`, `NETBIRD_ACME_EMAIL`, and optionally the
+  test-only `NETBIRD_ACME_CA_SERVER` directly to Compose; it does not run the
+  host contract.
 
 Provider names never leak into the application model. Provider DNS logic is
 the only provider-specific behavior below the adapter boundary.

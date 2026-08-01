@@ -65,6 +65,7 @@ run_release() {
   local release_ref
   local netbird_server_image
   local netbird_server_version
+  local live_workflow="${ROOT_DIR}/.github/workflows/provider-live-tests.yml"
 
   release_version="$(<"${ROOT_DIR}/VERSION")"
   release_ref="v${release_version}"
@@ -89,6 +90,29 @@ run_release() {
     [[ ${image_value} == *:* ]]
     [[ ${image_value} != *:latest ]]
   done <"${ROOT_DIR}/versions.env"
+
+  [[ $(grep -Rhc -- 'version: 1.16.0' \
+    "${ROOT_DIR}/.github/workflows/validate.yml" "${live_workflow}" | \
+    awk '{total += $1} END {print total}') -eq 3 ]]
+  grep -Fq -- 'version = "= 1.4.1"' \
+    "${ROOT_DIR}/marketplaces/digitalocean/packer.pkr.hcl"
+  grep -Fq -- 'version = "= 1.7.2"' \
+    "${ROOT_DIR}/marketplaces/hetzner/packer.pkr.hcl"
+  [[ $(grep -c '^    environment: marketplace-live-tests$' \
+    "${live_workflow}") -eq 5 ]]
+  if grep -q '^    env:' "${live_workflow}"; then
+    printf '[error] Live provider secrets must not be scoped to an entire job.\n' >&2
+    return 1
+  fi
+  [[ $(grep -c 'secrets.DIGITALOCEAN_DNS_TOKEN' "${live_workflow}") -eq 5 ]]
+  grep -Fq -- 'verify_public_stun' \
+    "${ROOT_DIR}/scripts/live-provider-test.sh"
+  grep -Fq -- 'verify_public_protocol_routes' \
+    "${ROOT_DIR}/scripts/live-provider-test.sh"
+  grep -Fq -- 'verify_installer_idempotence' \
+    "${ROOT_DIR}/scripts/live-provider-test.sh"
+  grep -Fq -- 'NETBIRD_ACME_CA_SERVER' \
+    "${ROOT_DIR}/shared/docker-compose.yml"
 
   test -s "${ROOT_DIR}/LICENSE"
   test -s "${ROOT_DIR}/PUBLISHING.md"
