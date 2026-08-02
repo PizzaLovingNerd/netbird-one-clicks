@@ -39,7 +39,8 @@ Do not submit any provider until every applicable item is complete.
 - [x] The repository is public at
   `https://github.com/PizzaLovingNerd/netbird-one-clicks`.
 - [ ] Release tag `v0.1.0` exists and is protected against mutation.
-- [ ] `make sync && make validate && make release` passes from a clean clone.
+- [ ] `make sync && make validate && make release && make artifacts` passes
+  from a clean clone, and `SHA256SUMS` verifies.
 - [ ] Container and installer versions match `docs/COMPONENTS.md`.
 - [ ] No token, private key, `.env` file, Packer log, cloud-init log, or live
   credential file is tracked. `build/` must remain ignored.
@@ -51,20 +52,33 @@ Do not submit any provider until every applicable item is complete.
 
 ### Publish the immutable source release
 
-Run these steps from a clean `main` checkout:
+Synchronize and commit all release preparation first:
 
 ```bash
 make sync
-make validate
-make release
-
-git status --short
 git add .
 git commit -m "Release NetBird one-clicks v0.1.0"
+```
+
+Then run the gates and create the tag from that clean `main` commit:
+
+```bash
+git status --short
+make validate
+make release
+make artifacts
+sha256sum --check build/releases/v0.1.0/SHA256SUMS
+
+git status --short
 git tag -s v0.1.0 -m "NetBird one-clicks v0.1.0"
 git push origin main
 git push origin v0.1.0
 ```
+
+Pushing the version tag runs `.github/workflows/release.yml`. It rebuilds and
+verifies every static artifact, then creates a draft GitHub release with the
+archives, checksum file, and JSON manifest attached. Review the workflow, the
+generated release notes, and every checksum before publishing the draft.
 
 Verify both release consumers before building or submitting:
 

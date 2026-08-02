@@ -19,6 +19,33 @@ Before starting a marketplace review:
    `ONECLICKS_REF=main`; do not publish an adapter that installs from a moving
    branch.
 
+## Build the release packages
+
+Run the artifact builder from the clean commit that will receive the release
+tag:
+
+```bash
+make artifacts
+sha256sum --check build/releases/v$(cat VERSION)/SHA256SUMS
+```
+
+The builder synchronizes generated files, runs the complete validation suite,
+and emits reproducible archives for the source tree, generic installer, every
+marketplace submission, and both Packer image-build contexts. It also writes a
+JSON manifest with the release version, Git commit, archive sizes, and SHA-256
+digests. Development builds made with `--allow-dirty` are explicitly marked in
+the manifest. Set `SOURCE_DATE_EPOCH` only when a release system supplies a
+canonical build timestamp.
+
+Cloud snapshots are deliberately not created by this step. Building a
+DigitalOcean or Hetzner image consumes provider resources and remains an
+explicit, credentialed release action described below.
+
+When a matching `v*` tag is pushed, the release workflow repeats these checks
+and creates a draft GitHub release containing the generated files. Publishing
+that draft remains a deliberate maintainer action after the provider live-test
+gate is complete.
+
 The default repository URL is
 `https://github.com/PizzaLovingNerd/netbird-one-clicks.git`.
 Change `ONECLICKS_REPOSITORY` in the marketplace artifacts if the final

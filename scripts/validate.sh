@@ -66,6 +66,7 @@ run_release() {
   local netbird_server_image
   local netbird_server_version
   local live_workflow="${ROOT_DIR}/.github/workflows/provider-live-tests.yml"
+  local release_workflow="${ROOT_DIR}/.github/workflows/release.yml"
 
   release_version="$(<"${ROOT_DIR}/VERSION")"
   release_ref="v${release_version}"
@@ -92,8 +93,9 @@ run_release() {
   done <"${ROOT_DIR}/versions.env"
 
   [[ $(grep -Rhc -- 'version: 1.16.0' \
-    "${ROOT_DIR}/.github/workflows/validate.yml" "${live_workflow}" | \
-    awk '{total += $1} END {print total}') -eq 3 ]]
+    "${ROOT_DIR}/.github/workflows/validate.yml" \
+    "${live_workflow}" "${release_workflow}" | \
+    awk '{total += $1} END {print total}') -eq 4 ]]
   grep -Fq -- 'version = "= 1.4.1"' \
     "${ROOT_DIR}/marketplaces/digitalocean/packer.pkr.hcl"
   grep -Fq -- 'version = "= 1.7.2"' \
@@ -115,10 +117,13 @@ run_release() {
     "${ROOT_DIR}/shared/docker-compose.yml"
 
   test -s "${ROOT_DIR}/LICENSE"
+  test -s "${ROOT_DIR}/CHANGELOG.md"
   test -s "${ROOT_DIR}/PUBLISHING.md"
   test -s "${ROOT_DIR}/TESTS.md"
   test -s "${ROOT_DIR}/UPDATING.md"
   test -s "${ROOT_DIR}/docs/COMPONENTS.md"
+  test -x "${ROOT_DIR}/scripts/build-artifacts.sh"
+  test -s "${release_workflow}"
   test -s "${ROOT_DIR}/.github/workflows/provider-live-tests.yml"
   test -s "${ROOT_DIR}/marketplaces/linode/submission/README.md"
   test -s "${ROOT_DIR}/marketplaces/linode/submission/DOCUMENTATION.md"
@@ -131,6 +136,29 @@ run_release() {
   python3 -m json.tool \
     "${ROOT_DIR}/marketplaces/hetzner/submission/metadata.json" \
     >/dev/null
+
+  grep -Fq -- "## ${release_version} -" "${ROOT_DIR}/CHANGELOG.md"
+  grep -Fq -- "- Version: ${release_version}" \
+    "${ROOT_DIR}/marketplaces/digitalocean/SUBMISSION.md"
+  grep -Fq -- "- Version: ${release_version}" \
+    "${ROOT_DIR}/marketplaces/linode/submission/LISTING.md"
+  grep -Fq -- "release \`${release_ref}\`" \
+    "${ROOT_DIR}/marketplaces/hostinger/SUBMISSION.md"
+  python3 - "${ROOT_DIR}" "${release_version}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+expected = sys.argv[2]
+metadata = json.loads(
+    (root / "marketplaces/hetzner/submission/metadata.json").read_text()
+)
+if metadata["version"] != expected:
+    raise SystemExit(
+        f"Hetzner metadata version {metadata['version']!r} != {expected!r}"
+    )
+PY
 
   if (( $(wc -c <"${ROOT_DIR}/marketplaces/hostinger/docker-compose.yml") > 8192 )); then
     printf '[error] Hostinger Compose artifact exceeds 8192 bytes.\n' >&2
@@ -206,6 +234,7 @@ PY
 
 run_ansible() {
   local ansible_command=""
+  local ansible_local_temp="${TMPDIR:-/tmp}"
 
   if command -v ansible-playbook >/dev/null; then
     ansible_command="$(command -v ansible-playbook)"
@@ -220,6 +249,7 @@ run_ansible() {
 
   (
     cd "${ROOT_DIR}/ansible"
+    ANSIBLE_LOCAL_TEMP="${ansible_local_temp}" \
     NETBIRD_INSTALLER_DIR="${ROOT_DIR}" \
     NETBIRD_FQDN="netbird.example.com" \
     NETBIRD_ACME_EMAIL="admin@example.com" \
@@ -227,7 +257,8 @@ run_ansible() {
         --inventory inventory/localhost.yml \
         --syntax-check \
         ../getting-started.yml
-    "${ansible_command}" \
+    ANSIBLE_LOCAL_TEMP="${ansible_local_temp}" \
+      "${ansible_command}" \
       --inventory inventory/localhost.yml \
       --syntax-check \
       prepare-image.yml
@@ -237,7 +268,8 @@ run_ansible() {
   if command -v ansible-lint >/dev/null; then
     (
       cd "${ROOT_DIR}/ansible"
-      ansible-lint ../getting-started.yml prepare-image.yml
+      ANSIBLE_LOCAL_TEMP="${ansible_local_temp}" \
+        ansible-lint ../getting-started.yml prepare-image.yml
     )
     printf '[pass] ansible-lint passed.\n'
   else

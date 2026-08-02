@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: sync validate syntax generated ansible packer release
+.PHONY: sync validate syntax generated ansible packer release artifacts
 
 sync:
 	./scripts/sync-marketplace-assets.sh
@@ -19,6 +19,9 @@ packer:
 
 release:
 	./scripts/validate.sh release
+
+artifacts:
+	./scripts/build-artifacts.sh
 
 validate:
 	./scripts/validate.sh all

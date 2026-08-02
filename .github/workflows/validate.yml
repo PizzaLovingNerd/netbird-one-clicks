@@ -24,3 +24,10 @@ jobs:
           python3 -m pip install --break-system-packages -r requirements-dev.txt
       - name: Validate
         run: make validate
+      - name: Build release artifacts
+        run: ./scripts/build-artifacts.sh --skip-validation
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: netbird-one-clicks-release-artifacts
+          path: build/releases/v*/
+          if-no-files-found: error

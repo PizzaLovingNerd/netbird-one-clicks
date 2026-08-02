@@ -77,3 +77,18 @@ make validate
 `make validate` checks shell and YAML syntax, validates the Ansible model when
 Ansible is installed, and fails if the generated Hostinger Compose artifact
 has drifted from the canonical shared model.
+
+## Release artifacts
+
+From a clean release commit, build all static submission and image-build
+packages with:
+
+```bash
+make artifacts
+```
+
+The versioned directory under `build/releases/` contains deterministic source,
+generic installer, Akamai/Linode, DigitalOcean, Vultr, Hostinger, and Hetzner
+archives, plus `SHA256SUMS` and a machine-readable release manifest. The
+DigitalOcean and Hetzner archives are complete Packer build contexts; provider
+API tokens are intentionally required later to create the cloud snapshots.
